@@ -48,7 +48,7 @@ market_data = {
     }
 }
 
-st.title("🏛️ Professor's Master Terminal")
+st.title("Terminal Screener Internal")
 
 # --- STEP 1: IHSG MONITOR ---
 st.subheader("1. Market Condition (IHSG)")
@@ -156,8 +156,8 @@ if st.session_state.get('active_ind') == ind:
 
 # --- STEP 5: PROFESSOR'S MORNING PICK ---
 st.divider()
-st.subheader("🎯 4. Professor's Morning Pick (Rekomendasi Besok)")
-if st.button("🔥 Generate 10 Saham Potensial"):
+st.subheader("Morning Pick (Rekomendasi Besok)")
+if st.button("Generate 10 Saham Potensial"):
     all_tickers = []
     for s_sect in market_data.values():
         for i_list in s_sect.values():
