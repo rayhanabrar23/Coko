@@ -7,7 +7,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 # --- CONFIG ---
-st.set_page_config(page_title="Professor's Tactical Terminal", layout="wide")
+st.set_page_config(page_title="Terminal Screening Stock", layout="wide")
 
 def clean_df(df):
     if df.empty: return df
@@ -27,7 +27,7 @@ market_data = {
     "PROPERTY": ["BSDE.JK", "PWON.JK", "CTRA.JK", "SMRA.JK", "SSIA.JK"]
 }
 
-st.title("🏛️ Professor's Tactical Terminal")
+st.title("TERMINAL SCREENING STOCK")
 
 # --- STEP 1: MARKET PULSE ---
 c1, c2 = st.columns([1, 1])
@@ -106,7 +106,7 @@ if target:
             tp = l['close'] + (3 * atr_val)
 
             # TAMPILAN DASHBOARD TAKTIS
-            st.markdown(f"### 🛡️ Tactical Command: {target}")
+            st.markdown(f"###Tactical Command: {target}")
             
             m1, m2, m3 = st.columns(3)
             m1.markdown(f"<div style='text-align:center; padding:10px; border:2px solid {color}; border-radius:10px;'><b>SIGNAL</b><br><span style='font-size:20px; color:{color};'>{signal}</span></div>", unsafe_allow_html=True)
@@ -135,8 +135,8 @@ if target:
 
 # --- STEP 4: GENERATE REFS ---
 st.divider()
-if st.button("🎯 Generate Top 10 Picks"):
-    st.subheader("🚀 Morning Buy List")
+if st.button("Generate Top 10 Picks"):
+    st.subheader("Morning Buy List")
     picks = []
     all_tickers = [item for sublist in market_data.values() for item in sublist]
     with st.spinner("Scanning..."):
@@ -154,7 +154,7 @@ if st.button("🎯 Generate Top 10 Picks"):
 
     # --- TOP-DOWN REVIEW ---
     st.write("---")
-    st.subheader("🧐 Professor's Market Review")
+    st.subheader("Today Market Review")
     ihsg_change = ((ihsg['close'].iloc[-1] - ihsg['close'].iloc[-2]) / ihsg['close'].iloc[-2]) * 100
     st.info(f"""
     **Analisis Top-Down:**
