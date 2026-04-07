@@ -1,33 +1,28 @@
 import streamlit as st
 import pandas as pd
-from logic_scanner import get_recommendations
+from logic_scanner import get_all_bei_tickers, get_recommendations_v2
 
-st.set_page_config(page_title="Top 10 Picks", layout="wide")
-st.title("🎯 Nightly Stock Hunter: Top 10 Picks for Tomorrow")
+st.set_page_config(page_title="BEI Full Scanner", layout="wide")
+st.title("🚀 Full Market Scanner (BEI)")
 
-# Daftar saham yang akan di-scan (Bisa kamu tambah sebanyak mungkin)
-tickers_to_scan = [
-    "BBCA.JK", "BBRI.JK", "BMRI.JK", "BBNI.JK", "ASII.JK", "TLKM.JK", 
-    "GOTO.JK", "ADRO.JK", "UNTR.JK", "AMRT.JK", "PGAS.JK", "ANTM.JK", 
-    "TINS.JK", "BRIS.JK", "BREN.JK", "AMMN.JK", "DSAK.JK", "INKP.JK"
-]
-
-st.sidebar.write(f"Scanning {len(tickers_to_scan)} stocks...")
-
-if st.button("🚀 Mulai Screening"):
-    with st.spinner('Memindai pasar... Mohon tunggu sebentar.'):
-        top_10 = get_recommendations(tickers_to_scan)
+if st.button("🔍 Scan Seluruh Saham BEI"):
+    # 1. Ambil semua kode saham otomatis
+    tickers = get_all_bei_tickers()
+    st.write(f"Menemukan {len(tickers)} saham listing. Memulai screening 150 saham teraktif...")
+    
+    progress_bar = st.progress(0)
+    
+    with st.spinner('Menganalisis teknikal...'):
+        top_picks = get_recommendations_v2(tickers)
+        progress_bar.progress(100)
         
-        if top_10:
-            df_final = pd.DataFrame(top_10)
+        if top_picks:
+            st.subheader("🏆 Top 10 Hasil Screening Malam Ini")
+            df_res = pd.DataFrame(top_picks)
             
-            # Styling Tabel
-            def highlight_strong(val):
-                return 'background-color: #d4edda; color: #155724' if val == 'STRONG BUY' else ''
-
-            st.subheader("🔥 Top 10 Rekomendasi Saham")
-            st.table(df_final.style.applymap(highlight_strong, subset=['Signal']))
+            # Percantik tabel
+            st.dataframe(df_res, use_container_width=True)
             
-            st.success("Saran: Fokus pada saham dengan Score 100 dan Signal 'STRONG BUY' untuk probabilitas cuan lebih tinggi.")
+            st.success("Selesai! Ini adalah 10 saham dengan kondisi teknikal terbaik saat ini.")
         else:
-            st.error("Gagal menarik data. Coba lagi dalam beberapa menit.")
+            st.warning("Tidak ditemukan saham yang memenuhi kriteria 'Strong Buy' malam ini.")
