@@ -7,7 +7,7 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 # --- CONFIG ---
-st.set_page_config(page_title="Professor's Executive Terminal", layout="wide")
+st.set_page_config(page_title="Professor's Tactical Terminal", layout="wide")
 
 def clean_df(df):
     if df.empty: return df
@@ -27,110 +27,119 @@ market_data = {
     "PROPERTY": ["BSDE.JK", "PWON.JK", "CTRA.JK", "SMRA.JK", "SSIA.JK"]
 }
 
-st.title("🏛️ Professor's Executive Terminal")
+st.title("🏛️ Professor's Tactical Terminal")
 
-# --- STEP 1: IHSG & INTERACTIVE SECTOR MAP ---
+# --- STEP 1: MARKET PULSE ---
 c1, c2 = st.columns([1, 1])
-
 with c1:
     st.subheader("📈 IHSG Market Pulse")
     ihsg = yf.download("^JKSE", period="1y", progress=False)
     ihsg = clean_df(ihsg)
     if not ihsg.empty:
         fig_ihsg = go.Figure(data=[go.Scatter(x=ihsg.index, y=ihsg['close'], fill='tozeroy', line_color='gold')])
-        fig_ihsg.update_layout(height=300, template='plotly_dark', margin=dict(l=0,r=0,t=0,b=0))
+        fig_ihsg.update_layout(height=250, template='plotly_dark', margin=dict(l=0,r=0,t=0,b=0))
         st.plotly_chart(fig_ihsg, use_container_width=True)
 
 with c2:
-    st.subheader("🗺️ Sectoral Map (5D Momentum)")
+    st.subheader("🗺️ Sectoral Momentum")
     sector_list = []
-    # Gunakan emiten paling liquid sebagai perwakilan sektor
     proxy = {"FINANCE":"BBCA.JK", "ENERGY":"ADRO.JK", "HEALTHCARE":"KLBF.JK", "BASIC":"ANTM.JK", "CONSUMER":"ICBP.JK", "INFRA":"TLKM.JK", "PROPERTY":"BSDE.JK"}
-    
-    with st.spinner("Updating Map..."):
-        for s, t in proxy.items():
-            try:
-                px_data = yf.download(t, period="10d", progress=False)
-                if not px_data.empty:
-                    px_data = clean_df(px_data)
-                    # Hitung return 5 hari terakhir
-                    perf = ((px_data['close'].iloc[-1] - px_data['close'].iloc[-5]) / px_data['close'].iloc[-5]) * 100
-                    sector_list.append({"Sector": s, "Performance": round(perf, 2), "Parent": "Market"})
-            except:
-                continue
-    
+    for s, t in proxy.items():
+        try:
+            px_data = yf.download(t, period="10d", progress=False)
+            if not px_data.empty:
+                px_data = clean_df(px_data)
+                perf = ((px_data['close'].iloc[-1] - px_data['close'].iloc[-5]) / px_data['close'].iloc[-5]) * 100
+                sector_list.append({"Sector": s, "Performance": round(perf, 2), "Parent": "Market", "Size": 10})
+        except: continue
     if sector_list:
-        df_tree = pd.DataFrame(sector_list)
-        # Fix: Pastikan 'values' adalah kolom angka di DataFrame
-        df_tree['size'] = 10 
-        fig_tree = px.treemap(
-            df_tree, 
-            path=['Parent', 'Sector'], 
-            values='size', 
-            color='Performance',
-            color_continuous_scale='RdYlGn',
-            range_color=[-3, 3],
-            hover_data=['Performance']
-        )
-        fig_tree.update_layout(height=300, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark')
+        fig_tree = px.treemap(pd.DataFrame(sector_list), path=['Parent', 'Sector'], values='Size', color='Performance', color_continuous_scale='RdYlGn', range_color=[-3, 3])
+        fig_tree.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark')
         st.plotly_chart(fig_tree, use_container_width=True)
-    else:
-        st.warning("Gagal memuat peta sektor.")
 
 st.divider()
 
-# --- STEP 2: SEARCH & EXPLORATION ---
-st.subheader("🔍 Stock Finder")
+# --- STEP 2: SEARCH ---
 search_col, nav_col = st.columns([1, 2])
-
 with search_col:
-    manual_ticker = st.text_input("Ketik Kode Manual (Contoh: GOTO.JK):", "").upper()
-
+    manual_ticker = st.text_input("🔍 Cari Kode (Contoh: BBRI.JK):", "").upper()
 with nav_col:
-    sec_choice = st.selectbox("Atau Pilih dari Database Sektor:", ["None"] + list(market_data.keys()))
+    sec_choice = st.selectbox("📂 Pilih Sektor:", ["None"] + list(market_data.keys()))
 
-# Penentuan Target Analisis
 target = None
 if manual_ticker:
     target = manual_ticker if manual_ticker.endswith(".JK") else f"{manual_ticker}.JK"
 elif sec_choice != "None":
-    target = st.selectbox("Pilih Saham di Sektor ini:", market_data[sec_choice])
+    target = st.selectbox("Pilih Saham:", market_data[sec_choice])
 
-# --- STEP 3: DEEP DIVE ANALYSIS ---
+# --- STEP 3: TACTICAL ANALYSIS ---
 if target:
     try:
-        st.write(f"### 🛡️ Deep Dive Intelligence: {target}")
         t_obj = yf.Ticker(target)
-        info = t_obj.info
-        
-        f1, f2, f3, f4 = st.columns(4)
-        f1.metric("P/E Ratio", info.get('trailingPE', 'N/A'))
-        f2.metric("PBV", info.get('priceToBook', 'N/A'))
-        f3.metric("Div. Yield", f"{info.get('dividendYield', 0)*100:.2f}%")
-        f4.metric("ROE", f"{info.get('returnOnEquity', 0)*100:.2f}%")
-
         df = yf.download(target, period="1y", progress=False)
         df = clean_df(df)
+        
         if not df.empty:
+            # Kalkulasi Indikator
             df['ema20'] = ta.ema(df['close'], length=20)
             df['rsi'] = ta.rsi(df['close'], length=14)
+            df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
             
+            l = df.iloc[-1]
+            atr_val = l['atr']
+            
+            # LOGIKA SUPPORT / RESISTANCE (Sederhana)
+            res = df['high'].rolling(20).max().iloc[-1]
+            sup = df['low'].rolling(20).min().iloc[-1]
+            
+            # LOGIKA SIGNAL & SL/TP
+            signal = "HOLD / WAIT"
+            color = "white"
+            if l['close'] > l['ema20'] and l['rsi'] < 65:
+                signal = "BUY / ACCUMULATE"
+                color = "#00FF00"
+            elif l['close'] < l['ema20'] or l['rsi'] > 75:
+                signal = "SELL / TAKE PROFIT"
+                color = "#FF0000"
+
+            sl = l['close'] - (2 * atr_val)
+            tp = l['close'] + (3 * atr_val)
+
+            # TAMPILAN DASHBOARD TAKTIS
+            st.markdown(f"### 🛡️ Tactical Command: {target}")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.markdown(f"<div style='text-align:center; padding:10px; border:2px solid {color}; border-radius:10px;'><b>SIGNAL</b><br><span style='font-size:20px; color:{color};'>{signal}</span></div>", unsafe_allow_html=True)
+            m2.metric("Resistance (Target)", f"{int(res)}")
+            m3.metric("Support (Batas Aman)", f"{int(sup)}")
+            
+            st.write("")
+            c_sl, c_tp, c_roe = st.columns(3)
+            c_sl.error(f"❌ STOP LOSS (SL): {int(sl)}")
+            c_tp.success(f"✅ TAKE PROFIT (TP): {int(tp)}")
+            c_roe.info(f"📊 ROE: {t_obj.info.get('returnOnEquity', 0)*100:.2f}%")
+
+            # Interactive Chart
             fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_width=[0.3, 0.7], vertical_spacing=0.05)
             fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange', width=1.5), name='EMA 20'), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange', width=2), name='EMA 20'), row=1, col=1)
             fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], line=dict(color='purple'), name='RSI'), row=2, col=1)
+            # Add SL/TP Lines on Chart
+            fig.add_hline(y=sl, line_dash="dash", line_color="red", annotation_text="SL Zone", row=1, col=1)
+            fig.add_hline(y=tp, line_dash="dash", line_color="green", annotation_text="TP Zone", row=1, col=1)
+            
             fig.update_layout(height=600, template='plotly_dark', xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
-    except:
-        st.error("Gagal menarik data untuk emiten ini. Pastikan kodenya benar (akhiri dengan .JK).")
+    except Exception as e:
+        st.error(f"Data error: {e}")
 
-# --- STEP 4: DAILY RECOMMENDATION ---
+# --- STEP 4: GENERATE REFS ---
 st.divider()
 if st.button("🎯 Generate Top 10 Picks"):
     st.subheader("🚀 Morning Buy List")
     picks = []
     all_tickers = [item for sublist in market_data.values() for item in sublist]
-    with st.spinner("Scanning market..."):
+    with st.spinner("Scanning..."):
         for t in list(set(all_tickers)):
             d = yf.download(t, period="50d", progress=False)
             d = clean_df(d)
@@ -138,25 +147,18 @@ if st.button("🎯 Generate Top 10 Picks"):
                 d['ema20'] = ta.ema(d['close'], length=20)
                 d['rsi'] = ta.rsi(d['close'], length=14)
                 l = d.iloc[-1]
-                # Filter: Dekat EMA20 dan RSI normal
-                dist = (l['close'] - l['ema20'])/l['ema20']
-                if 0 <= dist <= 0.02 and 40 <= l['rsi'] <= 65:
+                if 0 <= (l['close'] - l['ema20'])/l['ema20'] <= 0.02 and 40 <= l['rsi'] <= 60:
                     picks.append({"Ticker": t, "Price": int(l['close']), "RSI": round(l['rsi'], 1), "Signal": "EMA20 Rebound"})
-    
     if picks:
         st.table(pd.DataFrame(picks).head(10))
-    
-    # --- AUTOMATED TOP-DOWN REVIEW ---
+
+    # --- TOP-DOWN REVIEW ---
     st.write("---")
     st.subheader("🧐 Professor's Market Review")
-    
     ihsg_change = ((ihsg['close'].iloc[-1] - ihsg['close'].iloc[-2]) / ihsg['close'].iloc[-2]) * 100
-    market_mood = "Bullish" if ihsg_change > 0 else "Bearish"
-    
     st.info(f"""
-    **Analisis Top-Down Hari Ini:**
-    1. **Kondisi Makro:** IHSG saat ini sedang dalam fase **{market_mood}** ({ihsg_change:.2f}%). Penutupan terakhir di level {ihsg['close'].iloc[-1]:.0f}.
-    2. **Rotasi Sektor:** Berdasarkan Peta Sektor (Treemap), perhatikan kotak yang berwarna **Hijau Tua**; itu adalah sektor yang paling kuat menahan gempuran pasar.
-    3. **Strategi:** Pilih emiten dari list Morning Picks yang secara fundamental memiliki **ROE > 10%**. Ini menandakan perusahaan yang sehat secara operasional.
-    4. **Risk Note:** Selalu pasang Stop Loss (SL) di bawah EMA 20 (sekitar 2-3%).
+    **Analisis Top-Down:**
+    1. **IHSG:** Sedang bergerak di {ihsg['close'].iloc[-1]:.0f} ({ihsg_change:.2f}%).
+    2. **Tactical:** Gunakan level **Support/Resistance** di atas sebagai panduan entri. Jangan pernah 'All-In' tanpa memperhatikan level **SL (Stop Loss)**.
+    3. **Note:** Jika ROE emiten di bawah 5%, pertimbangkan untuk *Scalping* saja daripada *Hold* jangka panjang.
     """)
