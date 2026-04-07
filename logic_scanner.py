@@ -1,65 +1,52 @@
 import yfinance as yf
 import pandas_ta as ta
 import pandas as pd
-import requests
 
-def get_all_bei_tickers():
-    # Mengambil daftar saham dari sumber publik (Contoh: GitHub Gist atau scraping sederhana)
-    # Untuk keakuratan 100%, biasanya kita scraping dari situs IDX, 
-    # tapi sebagai shortcut yang stabil, kita gunakan link data csv:
-    url = "https://raw.githubusercontent.com/man-c/indo-stock-list/main/stocks.csv"
-    try:
-        df_list = pd.read_csv(url)
-        # Tambahkan .JK di belakang setiap kode
-        tickers = [str(s) + ".JK" for s in df_list['Symbol'].tolist()]
-        return tickers
-    except:
-        # Fallback list jika gagal ambil dari internet
-        return ["BBCA.JK", "BBRI.JK", "TLKM.JK", "ASII.JK", "BMRI.JK", "BBNI.JK", "GOTO.JK"]
-
-def get_recommendations_v2(full_ticker_list):
+def get_recommendations_v2(ticker_list):
     recommendations = []
     
-    # Kita proses dalam kelompok kecil (misal 50 saham per batch) agar tidak kena ban
-    # Untuk demo, kita batasi dulu ke 100 saham pertama agar aplikasi tidak lemot
-    process_list = full_ticker_list[:150] 
+    # Ambil data masal (Batasi 100 per proses agar tidak error)
+    # Kita pakai threads=True agar cepat
+    data = yf.download(ticker_list, period="3mo", interval="1d", group_by='ticker', threads=True)
     
-    # Tarik data masal
-    data = yf.download(process_list, period="3mo", interval="1d", group_by='ticker', threads=True)
-    
-    for ticker in process_list:
+    for ticker in ticker_list:
         try:
+            # Proteksi jika yfinance mengembalikan data kosong untuk ticker tertentu
+            if ticker not in data or data[ticker].empty:
+                continue
+                
             df = data[ticker].copy()
             df.columns = [col.lower() for col in df.columns]
             df.dropna(inplace=True)
             
-            if len(df) < 30: continue
+            if len(df) < 20: continue
 
-            # Indikator
+            # Indikator Dasar
             df.ta.ema(length=20, append=True)
             df.ta.rsi(length=14, append=True)
             
             last = df.iloc[-1]
             prev = df.iloc[-2]
             
-            # Hitung Skor
+            # Sistem Skoring
             score = 0
-            # 1. Golden Cross / Price above EMA
+            # 1. Trend (Harga > EMA20)
             if last['close'] > last['ema_20']: score += 40
-            # 2. RSI Rebound (bukan overbought)
-            if 40 <= last['rsi_14'] <= 60: score += 30
-            # 3. Volume Spike
-            if last['volume'] > df['volume'].tail(10).mean(): score += 30
+            # 2. Momentum (RSI Rebound 40-65)
+            if 40 <= last['rsi_14'] <= 65: score += 30
+            # 3. Volume (Volume hari ini > Rata-rata 5 hari)
+            if last['volume'] > df['volume'].tail(5).mean(): score += 30
 
-            if score >= 70: # Hanya masukkan yang potensial
-                recommendations.append({
-                    "Ticker": ticker,
-                    "Price": int(last['close']),
-                    "Score": score,
-                    "RSI": round(last['rsi_14'], 1),
-                    "Status": "STRONG BUY" if score == 100 else "WATCHLIST"
-                })
+            # Masukkan hasil jika skor cukup baik
+            recommendations.append({
+                "Ticker": ticker.replace(".JK", ""),
+                "Price": int(last['close']),
+                "Score": score,
+                "RSI": round(last['rsi_14'], 1),
+                "Signal": "STRONG BUY" if score >= 70 else "WATCHLIST"
+            })
         except:
             continue
             
+    # Urutkan berdasarkan skor tertinggi
     return sorted(recommendations, key=lambda x: x['Score'], reverse=True)[:10]
