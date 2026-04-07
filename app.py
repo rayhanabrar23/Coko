@@ -70,19 +70,20 @@ if st.button(f"🔍 Scan Industri {ind}"):
 if st.session_state.get('active_ind') == ind:
     st.write(f"### 📊 Radar Sektor: {ind}")
     radar_data = []
-    for t in selected_list:
-        d = yf.download(t, period="1y", progress=False)
-        d = clean_df(d)
-        if not d.empty:
-            d['ema20'] = ta.ema(d['close'], length=20)
-            d['rsi'] = ta.rsi(d['close'], length=14)
-            d['atr'] = ta.atr(d['high'], d['low'], d['close'], length=14)
-            l = d.iloc[-1]
-            radar_data.append({
-                "Ticker": t, "Price": int(l['close']), "RSI": round(l['rsi'], 1),
-                "Entry": int(l['ema20']), "SL": int(l['ema20'] - (l['atr']*2)),
-                "Status": "🔥 OB" if l['rsi'] > 70 else "🧊 OS" if l['rsi'] < 30 else "OK"
-            })
+    with st.spinner("Scanning..."):
+        for t in selected_list:
+            d = yf.download(t, period="1y", progress=False)
+            d = clean_df(d)
+            if not d.empty:
+                d['ema20'] = ta.ema(d['close'], length=20)
+                d['rsi'] = ta.rsi(d['close'], length=14)
+                d['atr'] = ta.atr(d['high'], d['low'], d['close'], length=14)
+                l = d.iloc[-1]
+                radar_data.append({
+                    "Ticker": t, "Price": int(l['close']), "RSI": round(l['rsi'], 1),
+                    "Entry": int(l['ema20']), "SL": int(l['ema20'] - (l['atr']*2)),
+                    "Status": "🔥 OB" if l['rsi'] > 70 else "🧊 OS" if l['rsi'] < 30 else "OK"
+                })
     st.table(pd.DataFrame(radar_data))
 
     st.divider()
@@ -91,10 +92,10 @@ if st.session_state.get('active_ind') == ind:
     st.subheader("3. Deep Dive Intelligence")
     target = st.selectbox("Pilih Saham untuk Analisis Total:", selected_list)
     
-    # Fundamental Metrics
     ticker_obj = yf.Ticker(target)
     info = ticker_obj.info
     
+    # Fundamental Metrics
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("P/E Ratio", f"{info.get('trailingPE', 'N/A')}")
     m2.metric("PBV Ratio", f"{info.get('priceToBook', 'N/A')}")
@@ -124,13 +125,17 @@ if st.session_state.get('active_ind') == ind:
     fig.update_layout(height=700, template='plotly_dark', xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 
-    # News Feed
+    # --- REVISI NEWS FEED (ANTI-KEYERROR) ---
     st.write("### 📰 Latest News")
     news = ticker_obj.news
     if news:
         for item in news[:3]:
-            st.write(f"**[{item['publisher']}]** {item['title']}")
-            st.write(f"Link: {item['link']}")
+            # Gunakan .get() untuk menghindari KeyError
+            publisher = item.get('publisher', 'News')
+            title = item.get('title', 'No Title Available')
+            link = item.get('link', '#')
+            st.write(f"**[{publisher}]** {title}")
+            st.write(f"Link: [Klik di sini]({link})")
     else:
         st.write("Tidak ada berita terbaru untuk emiten ini.")
 
@@ -144,16 +149,17 @@ if st.button("🎯 Generate 10 Morning Picks"):
             all_t.extend(i)
     
     recs = []
-    for t in list(set(all_t)):
-        d = yf.download(t, period="1y", progress=False)
-        d = clean_df(d)
-        if not d.empty and len(d) > 20:
-            d['ema20'] = ta.ema(d['close'], length=20)
-            d['rsi'] = ta.rsi(d['close'], length=14)
-            last = d.iloc[-1]
-            dist = (last['close'] - last['ema20']) / last['ema20']
-            if 0 <= dist <= 0.03 and 40 <= last['rsi'] <= 65:
-                recs.append({"Ticker": t, "Price": int(last['close']), "RSI": round(last['rsi'], 1), "Note": "Area Pantul EMA20"})
+    with st.spinner("Scanning..."):
+        for t in list(set(all_t)):
+            d = yf.download(t, period="1y", progress=False)
+            d = clean_df(d)
+            if not d.empty and len(d) > 20:
+                d['ema20'] = ta.ema(d['close'], length=20)
+                d['rsi'] = ta.rsi(d['close'], length=14)
+                last = d.iloc[-1]
+                dist = (last['close'] - last['ema20']) / last['ema20']
+                if 0 <= dist <= 0.03 and 40 <= last['rsi'] <= 65:
+                    recs.append({"Ticker": t, "Price": int(last['close']), "RSI": round(last['rsi'], 1), "Note": "Area Pantul EMA20"})
     
     if recs:
         st.table(pd.DataFrame(recs).sort_values(by="RSI").head(10))
