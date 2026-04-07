@@ -2,112 +2,131 @@ import streamlit as st
 import pandas as pd
 import yfinance as yf
 import pandas_ta as ta
+import time
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="Top-Down Market Hunter", layout="wide")
+# --- KONFIGURASI ---
+st.set_page_config(page_title="Professor's Lab", layout="wide")
 
-# Fungsi Helper untuk Membersihkan Data yfinance
 def clean_df(df):
-    if df.empty:
-        return df
-    # Meratakan MultiIndex jika ada (Fix untuk yfinance terbaru)
+    if df.empty: return df
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-    # Paksa kolom jadi huruf kecil
     df.columns = [c.lower() for c in df.columns]
     return df
 
-st.title("🏹 Top-Down Analysis Dashboard")
-st.write("Analisis pasar secara terstruktur: Market -> Sector -> Stock.")
+st.title("👨‍🏫 Professor's Trading Lab: Live Investigation")
+st.write("Sistem tidak hanya memberikan hasil, tapi menunjukkan proses 'Due Diligence' pada setiap saham.")
 
-# --- STEP 1: MARKET CONDITION (IHSG) ---
-st.header("Step 1: Market Condition (IHSG)")
-if st.button("📊 Check IHSG Health"):
-    with st.spinner("Mengambil data IHSG..."):
-        ihsg = yf.download("^JKSE", period="1mo", interval="1d", progress=False)
-        ihsg = clean_df(ihsg)
-        
-        if not ihsg.empty:
-            last_price = float(ihsg['close'].iloc[-1])
-            prev_price = float(ihsg['close'].iloc[-2])
-            change = ((last_price - prev_price) / prev_price) * 100
-            
-            # Tampilan Metric
-            col1, col2 = st.columns([1, 3])
-            with col1:
-                st.metric("IHSG Close", f"{last_price:.2f}", f"{change:.2f}%")
-            with col2:
-                st.line_chart(ihsg['close'])
-        else:
-            st.error("Gagal memuat data IHSG.")
-
-st.divider()
-
-# --- STEP 2: SECTOR SELECTION ---
-st.header("Step 2: Choose Sector")
-# Daftar sektor yang bisa kamu modifikasi/tambah
+# Daftar Sektor (Sama seperti sebelumnya)
 sectors = {
     "Perbankan (Big 4)": ["BBCA.JK", "BBRI.JK", "BMRI.JK", "BBNI.JK"],
     "Energi & Batubara": ["ADRO.JK", "ITMG.JK", "PTBA.JK", "MEDC.JK", "HRUM.JK"],
-    "Teknologi & Bank Digital": ["GOTO.JK", "ARTO.JK", "BBYB.JK", "BUKA.JK"],
-    "Infrastruktur & Telco": ["TLKM.JK", "ISAT.JK", "EXCL.JK", "JSMR.JK"],
-    "Consumer Goods": ["ICBP.JK", "INDF.JK", "UNVR.JK", "AMRT.JK", "MYOR.JK"],
-    "Metal Mining (Nikel/Emas)": ["ANTM.JK", "TINS.JK", "MDKA.JK", "MBMA.JK", "NCKL.JK"]
+    "Metal Mining": ["ANTM.JK", "TINS.JK", "MDKA.JK", "MBMA.JK", "NCKL.JK"],
+    "Teknologi": ["GOTO.JK", "ARTO.JK", "BBYB.JK", "BUKA.JK"]
 }
 
-selected_sector = st.selectbox("Pilih sektor yang sedang ramai/menarik:", list(sectors.keys()))
+selected_sector = st.selectbox("Pilih Sektor Investigasi:", list(sectors.keys()))
 tickers = sectors[selected_sector]
 
-st.divider()
-
-# --- STEP 3: STOCK DEEP DIVE ---
-st.header(f"Step 3: Screening Saham di Sektor {selected_sector}")
-if st.button(f"🔍 Scan {len(tickers)} Saham Sektor Ini"):
-    with st.spinner(f"Menganalisis teknikal {selected_sector}..."):
-        results = []
-        for t in tickers:
-            try:
-                # Ambil data 6 bulan agar EMA 20 & 50 akurat
-                df = yf.download(t, period="6mo", interval="1d", progress=False)
-                df = clean_df(df)
-                
-                if df.empty or len(df) < 50:
-                    continue
-                
-                # Hitung Indikator
-                df.ta.ema(length=20, append=True)
-                df.ta.rsi(length=14, append=True)
-                
-                last = df.iloc[-1]
-                
-                # Logika Penilaian (Scoring)
-                is_above_ema = last['close'] > last['ema_20']
-                rsi_val = last['rsi_14']
-                
-                # Status: BUY jika di atas EMA dan RSI tidak overbought (>70)
-                if is_above_ema and (40 <= rsi_val <= 65):
-                    status = "🔥 STRONG BUY"
-                elif is_above_ema:
-                    status = "👀 WATCHLIST"
-                else:
-                    status = "❌ AVOID"
-                
-                results.append({
-                    "Ticker": t.replace(".JK", ""),
-                    "Price": int(last['close']),
-                    "RSI": round(rsi_val, 1),
-                    "Above EMA20": "✅" if is_above_ema else "❌",
-                    "Status": status
-                })
-            except:
-                continue
+if st.button(f"🚀 Mulai Investigasi Sektor {selected_sector}"):
+    all_results = []
+    
+    # Tempat untuk menampilkan log proses
+    log_container = st.container()
+    
+    with log_container:
+        st.subheader("🕵️ Live Investigation Log")
         
-        if results:
-            df_res = pd.DataFrame(results)
-            # Menampilkan tabel dengan urutan Status terbaik di atas
-            st.table(df_res.sort_values(by="Status"))
-            st.success("Analisis selesai. Fokus pada saham dengan status 'STRONG BUY'.")
-        else:
-            st.warning("Tidak ada data yang berhasil ditarik.")
+        for t in tickers:
+            # Gunakan st.status untuk menunjukkan proses tiap saham
+            with st.status(f"Menganalisis {t}...", expanded=False) as status:
+                try:
+                    st.write(f"📥 Menarik data histori 1 tahun untuk {t}...")
+                    df = yf.download(t, period="1y", interval="1d", progress=False)
+                    df = clean_df(df)
+                    
+                    if df.empty:
+                        status.update(label=f"❌ {t}: Data Kosong", state="error")
+                        continue
 
-st.info("💡 Tips: Lakukan screening ini setiap malam setelah market tutup untuk menentukan belanja besok pagi.")
+                    # --- PROSES TEKNIKAL ---
+                    st.write("🧪 Menghitung Indikator: EMA, MACD, RSI, & Volume MA...")
+                    df.ta.ema(length=20, append=True)
+                    df.ta.ema(length=50, append=True)
+                    df.ta.macd(append=True)
+                    df.ta.rsi(length=14, append=True)
+                    df['vol_ma'] = df['volume'].rolling(window=20).mean()
+                    
+                    last = df.iloc[-1]
+                    
+                    # --- CHECKLIST INVESTIGASI ---
+                    score = 0
+                    checks = []
+                    
+                    # 1. Cek Trend
+                    if last['ema_20'] > last['ema_50']:
+                        score += 25
+                        checks.append("✅ **Trend:** Golden Cross EMA20/50 detected.")
+                    else:
+                        checks.append("❌ **Trend:** Bearish (EMA20 < EMA50).")
+                        
+                    # 2. Cek Posisi Harga
+                    if last['close'] > last['ema_20']:
+                        score += 25
+                        checks.append(f"✅ **Price:** {int(last['close'])} above Support EMA20.")
+                    else:
+                        checks.append("❌ **Price:** Below EMA20 (Weakness).")
+                        
+                    # 3. Cek MACD (Momentum)
+                    if last['macd_12_26_9'] > last['macds_12_26_9']:
+                        score += 25
+                        checks.append("✅ **Momentum:** MACD Bullish Cross.")
+                    else:
+                        checks.append("❌ **Momentum:** MACD Bearish/Flat.")
+                        
+                    # 4. Cek Volume (Big Money)
+                    if last['volume'] > last['vol_ma']:
+                        score += 25
+                        checks.append(f"✅ **Volume:** {int(last['volume'])} > MA Volume (Accumulation).")
+                    else:
+                        checks.append("❌ **Volume:** Below Average (Low Interest).")
+
+                    # Tampilkan Checklist di dalam status
+                    for check in checks:
+                        st.write(check)
+
+                    # Update status label berdasarkan skor
+                    final_action = "❌ NO SETUP"
+                    if score >= 100: final_action = "💎 HIGH PROBABILITY"
+                    elif score >= 75: final_action = "✅ SOLID BUY"
+                    
+                    all_results.append({
+                        "Ticker": t.replace(".JK", ""),
+                        "Price": int(last['close']),
+                        "Score": score,
+                        "RSI": round(last['rsi_14'], 1),
+                        "Decision": final_action
+                    })
+                    
+                    status.update(label=f"✅ {t}: Investigation Complete (Score: {score})", state="complete")
+                    time.sleep(0.5) # Jeda sedikit agar proses terlihat "manusiawi"
+                
+                except Exception as e:
+                    status.update(label=f"⚠️ {t}: Error {str(e)}", state="error")
+
+    # --- TABEL HASIL AKHIR ---
+    st.divider()
+    st.header("🏆 Final Recommendation List")
+    if all_results:
+        final_df = pd.DataFrame(all_results).sort_values("Score", ascending=False)
+        
+        # Menampilkan tabel dengan gaya profesor
+        st.dataframe(final_df, use_container_width=True, hide_index=True)
+        
+        # Kesimpulan Otomatis
+        top_pick = final_df.iloc[0]
+        if top_pick['Score'] >= 75:
+            st.balloons()
+            st.success(f"Berdasarkan investigasi, **{top_pick['Ticker']}** adalah kandidat terkuat untuk entry besok pagi.")
+    else:
+        st.warning("Tidak ada saham yang lolos kriteria investigasi malam ini.")
