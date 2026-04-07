@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # --- CONFIG ---
-st.set_page_config(page_title="Professor's Intel Terminal", layout="wide")
+st.set_page_config(page_title="Professor's Intelligence Terminal", layout="wide")
 
 def clean_df(df):
     if df.empty: return df
@@ -15,26 +15,42 @@ def clean_df(df):
     df.columns = [c.lower() for c in df.columns]
     return df
 
-# --- DATABASE SEKTOR & INDUSTRI ---
+# --- DATABASE SEKTOR & INDUSTRI LENGKAP (KEMBALI KE SEMULA) ---
 market_data = {
     "FINANCE": {
         "Big Banks": ["BBCA.JK", "BBRI.JK", "BMRI.JK", "BBNI.JK"],
-        "Mid-Small Banks": ["BDMN.JK", "PNBN.JK", "BRIS.JK"],
-        "Digital Banks": ["ARTO.JK", "BBYB.JK", "BBNK.JK"]
+        "Mid-Small Banks": ["BDMN.JK", "PNBN.JK", "BJBR.JK", "BJTM.JK", "BRIS.JK"],
+        "Digital Banks": ["ARTO.JK", "BBYB.JK", "BBNK.JK", "BANK.JK"],
+        "Multi-Finance": ["ADMF.JK", "BBLD.JK", "CFIN.JK"]
     },
     "ENERGY": {
-        "Coal": ["ADRO.JK", "ITMG.JK", "PTBA.JK", "HRUM.JK", "BUMI.JK"],
-        "Oil & Gas": ["MEDC.JK", "AKRA.JK", "PGAS.JK", "ELSA.JK"],
-        "Renewable": ["PGEO.JK", "BREN.JK"]
+        "Coal": ["ADRO.JK", "ITMG.JK", "PTBA.JK", "HRUM.JK", "BUMI.JK", "BYAN.JK", "GEMS.JK"],
+        "Oil & Gas": ["MEDC.JK", "AKRA.JK", "ENRG.JK", "PGAS.JK", "ELSA.JK"],
+        "Renewable": ["PGEO.JK", "BREN.JK", "KEEN.JK"]
     },
     "BASIC INFO": {
-        "Metal Mining": ["ANTM.JK", "TINS.JK", "MDKA.JK", "INCO.JK"],
+        "Metal Mining": ["ANTM.JK", "TINS.JK", "MDKA.JK", "MBMA.JK", "INCO.JK", "NCKL.JK"],
+        "Cement": ["SMGR.JK", "INTP.JK", "SMCB.JK"],
         "Chemicals": ["TPIA.JK", "BRPT.JK", "ESSA.JK"]
     },
+    "CONSUMER CYCLICAL": {
+        "Retail": ["ACES.JK", "MAPI.JK", "MAPA.JK", "AMRT.JK", "MIDI.JK"],
+        "Automotive": ["ASII.JK", "ASLC.JK", "DRMA.JK", "SMSM.JK"],
+        "Media": ["MNCN.JK", "SCMA.JK"]
+    },
+    "CONSUMER NON-CYCLICAL": {
+        "Food & Beverage": ["ICBP.JK", "INDF.JK", "MYOR.JK", "ROTI.JK", "GOOD.JK"],
+        "Tobacco": ["GGRM.JK", "HMSP.JK", "WIIM.JK"],
+        "Poultry": ["CPIN.JK", "JPFA.JK", "MAIN.JK"]
+    },
     "INFRASTRUCTURE": {
-        "Telecommunication": ["TLKM.JK", "ISAT.JK", "EXCL.JK"],
+        "Telecommunication": ["TLKM.JK", "ISAT.JK", "EXCL.JK", "FREN.JK"],
         "Towers": ["TOWR.JK", "TBIG.JK", "MTEL.JK"],
         "Construction": ["ADHI.JK", "PTPP.JK", "WIKA.JK"]
+    },
+    "PROPERTY": {
+        "Real Estate": ["BSDE.JK", "PWON.JK", "ASRI.JK", "CTRA.JK", "SMRA.JK"],
+        "Industrial": ["SSIA.JK", "DMAS.JK", "KIJA.JK"]
     }
 }
 
@@ -88,7 +104,7 @@ if st.session_state.get('active_ind') == ind:
 
     st.divider()
     
-    # --- STEP 4: DEEP DIVE (TECHNICAL + FUNDAMENTAL + NEWS) ---
+    # --- STEP 4: DEEP DIVE ---
     st.subheader("3. Deep Dive Intelligence")
     target = st.selectbox("Pilih Saham untuk Analisis Total:", selected_list)
     
@@ -125,19 +141,22 @@ if st.session_state.get('active_ind') == ind:
     fig.update_layout(height=700, template='plotly_dark', xaxis_rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- REVISI NEWS FEED (ANTI-KEYERROR) ---
+    # --- NEWS FEED STABLE ---
     st.write("### 📰 Latest News")
-    news = ticker_obj.news
-    if news:
-        for item in news[:3]:
-            # Gunakan .get() untuk menghindari KeyError
-            publisher = item.get('publisher', 'News')
-            title = item.get('title', 'No Title Available')
-            link = item.get('link', '#')
-            st.write(f"**[{publisher}]** {title}")
-            st.write(f"Link: [Klik di sini]({link})")
-    else:
-        st.write("Tidak ada berita terbaru untuk emiten ini.")
+    try:
+        news = ticker_obj.news
+        valid_news = [n for n in news if n.get('title')]
+        if valid_news:
+            for item in valid_news[:3]:
+                publisher = item.get('publisher', 'News')
+                title = item.get('title', 'Headline')
+                link = item.get('link', 'https://finance.yahoo.com')
+                st.markdown(f"**[{publisher}]** {title}")
+                st.write(f"Link: {link}")
+        else:
+            st.info("Tidak ada berita terbaru.")
+    except:
+        st.info("Gagal memuat berita.")
 
 # --- STEP 5: MORNING PICK ---
 st.divider()
