@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # --- CONFIG ---
-st.set_page_config(page_title="Professor's Top-Down Terminal", layout="wide")
+st.set_page_config(page_title="Professor's Master Terminal", layout="wide")
 
 def clean_df(df):
     if df.empty: return df
@@ -48,7 +48,7 @@ market_data = {
     }
 }
 
-st.title("🏛️ Professor's Top-Down Terminal")
+st.title("🏛️ Professor's Master Terminal")
 
 # --- STEP 1: IHSG MONITOR ---
 st.subheader("1. Market Condition (IHSG)")
@@ -68,7 +68,7 @@ if not ihsg.empty:
 st.divider()
 
 # --- STEP 2: NAVIGATION ---
-st.subheader("2. Sector & Industry Explorer")
+st.subheader("2. Top-Down Explorer")
 c1, c2 = st.columns(2)
 with c1:
     sec = st.selectbox("Pilih Sektor:", list(market_data.keys()))
@@ -77,7 +77,7 @@ with c2:
 
 selected_list = market_data[sec][ind]
 
-# --- STEP 3: MARKET RADAR ---
+# --- STEP 3: MARKET RADAR & DETAIL CHART ---
 if st.button(f"🔍 Scan Industri {ind}"):
     st.session_state['active_ind'] = ind
     
@@ -107,10 +107,8 @@ if st.session_state.get('active_ind') == ind:
         st.table(pd.DataFrame(radar_data))
 
     st.divider()
-
-    # --- STEP 4: ADVANCED WAR ROOM CHART ---
-    st.subheader("3. Deep Dive Analysis")
-    target = st.selectbox("Pilih Saham untuk Analisis Visual:", selected_list)
+    st.subheader("3. Deep Dive Visual Analysis")
+    target = st.selectbox("Pilih Saham untuk Chart Detail:", selected_list)
     
     df = yf.download(target, period="2y", progress=False)
     df = clean_df(df)
@@ -135,21 +133,17 @@ if st.session_state.get('active_ind') == ind:
 
         # Plot
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, vertical_spacing=0.03, row_width=[0.15, 0.15, 0.7])
-        
-        # Main Chart
         fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'], name='Price'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange'), name='EMA 20'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df['ema200'], line=dict(color='white', width=2), name='EMA 200'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df[bbu], line=dict(color='rgba(173,216,230,0.2)', dash='dash'), name='BB Upper'), row=1, col=1)
         fig.add_trace(go.Scatter(x=df.index, y=df[bbl], line=dict(color='rgba(173,216,230,0.2)', dash='dash'), name='BB Lower'), row=1, col=1)
         
-        # S/R H-Lines
         for s in sup_l[-3:]:
             fig.add_hline(y=s, line_color="green", line_dash="dash", opacity=0.3, row=1, col=1)
         for r in res_l[-3:]:
             fig.add_hline(y=r, line_color="red", line_dash="dash", opacity=0.3, row=1, col=1)
 
-        # RSI & Volume
         fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], line=dict(color='purple'), name='RSI'), row=2, col=1)
         fig.add_hline(y=70, line_color="red", line_dash="dot", row=2, col=1)
         fig.add_hline(y=30, line_color="green", line_dash="dot", row=2, col=1)
@@ -157,7 +151,40 @@ if st.session_state.get('active_ind') == ind:
         v_c = ['red' if df['open'].iloc[i] > df['close'].iloc[i] else 'green' for i in range(len(df))]
         fig.add_trace(go.Bar(x=df.index, y=df['volume'], marker_color=v_c, name='Volume'), row=3, col=1)
 
-        fig.update_layout(height=850, template='plotly_dark', xaxis_rangeslider_visible=False, showlegend=True)
+        fig.update_layout(height=850, template='plotly_dark', xaxis_rangeslider_visible=False)
         st.plotly_chart(fig, use_container_width=True)
+
+# --- STEP 5: PROFESSOR'S MORNING PICK ---
+st.divider()
+st.subheader("🎯 4. Professor's Morning Pick (Rekomendasi Besok)")
+if st.button("🔥 Generate 10 Saham Potensial"):
+    all_tickers = []
+    for s_sect in market_data.values():
+        for i_list in s_sect.values():
+            all_tickers.extend(i_list)
+    
+    recs = []
+    with st.spinner("Scanning seluruh database bursa..."):
+        for t in list(set(all_tickers)):
+            d = yf.download(t, period="1y", progress=False)
+            d = clean_df(d)
+            if not d.empty and len(d) > 20:
+                d['ema20'] = ta.ema(d['close'], length=20)
+                d['rsi'] = ta.rsi(d['close'], length=14)
+                last = d.iloc[-1]
+                
+                # Filter: Dekat EMA20, RSI Sehat, Price > EMA20
+                dist = (last['close'] - last['ema20']) / last['ema20']
+                if 0 <= dist <= 0.03 and 40 <= last['rsi'] <= 65:
+                    recs.append({
+                        "Ticker": t, "Price": int(last['close']), 
+                        "RSI": round(last['rsi'], 1), 
+                        "Reason": "Uptrend & Area Pantul EMA20"
+                    })
         
-        st.success(f"💡 **Professor's Tip:** {target} sedang berada di harga {int(df['close'].iloc[-1])}. Cek apakah nempel di Support Hijau atau EMA 200 Putih!")
+        if recs:
+            top_10 = pd.DataFrame(recs).sort_values(by="RSI").head(10)
+            st.table(top_10)
+            st.success("Saran Profesor: Beli saat harga koreksi mendekati EMA 20 dan pantau volume saat pembukaan market jam 09.00.")
+        else:
+            st.warning("Market sedang ekstrem, belum ada saham yang masuk kriteria aman malam ini.")
