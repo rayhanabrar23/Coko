@@ -792,7 +792,7 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
             else: return 'background-color:#2a0010;color:#ff8888'
 
         display_cols=["Ticker","Score","Signal","Price","RSI","Vol","🔥","MACD","EMA20","SL","TP","R:R","Pattern"]
-        styled=df_res[display_cols].style.applymap(color_score,subset=['Score'])
+        styled=df_res[display_cols].style.map(color_score,subset=['Score'])
         st.dataframe(styled,use_container_width=True,hide_index=True)
 
         st.success(f"✅ **{len(df_res)} saham kandidat** dari {len(tickers_to_scan)} yang discan | Errors: {errors}")
