@@ -6,12 +6,11 @@ import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
-from datetime import datetime
 
 # ─────────────────────────────────────────────────────────
-# CONFIG
+# CONFIG & STYLE
 # ─────────────────────────────────────────────────────────
-st.set_page_config(page_title="IDX Terminal v4", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="IDX Terminal v4.2", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -28,36 +27,23 @@ body, .stApp { background-color: #07090f; color: #d0d8e8; }
 .tag-buy    { background:#002e18; color:#44dd88; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
 .tag-hold   { background:#332200; color:#ffcc00; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
 .tag-sell   { background:#3a0010; color:#ff4466; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
-div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────
-# UNIVERSE DATABASE
+# DATABASE & HELPERS
 # ─────────────────────────────────────────────────────────
-
-IDX30 = ["AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN","BMRI","BRIS","BUKA","CPIN","EXCL","GOTO","ICBP","INCO","INDF","ISAT","ITMG","KLBF","MDKA","MEDC","MIKA","PGEO","PTBA","TLKM","TOWR","UNTR"]
-LQ45 = list(dict.fromkeys(IDX30 + ["ACES","AKRA","ARTO","BELI","BNGA","BSDE","CTRA","EMTK","GGRM","HMSP","INTP","JSMR","MAPI","MYOR","PGAS","PNBN","PWON","SMGR","TBIG","TINS","TKIM","UNVR","HEAL","BYAN","CMRY","DCII","DSSA","NCKL","INKP","SILO"]))[:45]
 
 MANUAL_SECTORS = {
-    "FINANCE":    ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","PNBN","MEGA","BDMN","NISP","BBTN"],
-    "ENERGY":     ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","ENRG","GEMS","AADI","BYAN"],
-    "HEALTHCARE": ["MIKA","HEAL","SILO","KLBF","SIDO","PYFA"],
-    "BASIC MAT":  ["ANTM","TINS","MDKA","SMGR","INTP","INCO","NCKL","AMMN","BRMS"],
-    "CONSUMER":   ["ACES","MAPI","AMRT","ICBP","INDF","GGRM","HMSP","UNVR","MYOR","CPIN"],
-    "INFRA":      ["TLKM","ISAT","EXCL","TOWR","TBIG","JSMR","MTEL","PGEO"],
-    "PROPERTY":   ["BSDE","PWON","CTRA","SMRA","SSIA","PANI"],
-    "TECH":       ["GOTO","BUKA","EMTK","DCII","BELI"],
+    "FINANCE": ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","NISP"],
+    "ENERGY": ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","ENRG","AADI"],
+    "BASIC MAT": ["ANTM","TINS","MDKA","SMGR","INTP","INCO","NCKL","AMMN"],
+    "CONSUMER": ["ACES","MAPI","AMRT","ICBP","INDF","GGRM","UNVR","MYOR"],
+    "INFRA": ["TLKM","ISAT","EXCL","TOWR","TBIG","JSMR","MTEL","PGEO"],
+    "TECH": ["GOTO","BUKA","EMTK","DCII","BELI"]
 }
 
-SECTOR_PROXY = {"FINANCE":"BBCA","ENERGY":"ADRO","HEALTHCARE":"KLBF","BASIC MAT":"ANTM","CONSUMER":"ICBP","INFRA":"TLKM","PROPERTY":"BSDE","TECH":"GOTO"}
-
-def add_jk(tickers):
-    return [t if t.endswith(".JK") else f"{t}.JK" for t in tickers]
-
-# ─────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────
+SECTOR_PROXY = {"FINANCE":"BBCA","ENERGY":"ADRO","BASIC MAT":"ANTM","CONSUMER":"ICBP","INFRA":"TLKM","TECH":"GOTO"}
 
 def clean_df(df):
     if df.empty: return df
@@ -73,31 +59,18 @@ def safe_float(val, default=0.0):
     except: return default
 
 # ─────────────────────────────────────────────────────────
-# ANALYSIS ENGINE
+# LOGIC (REVISI: LEBIH ADAPTIF)
 # ─────────────────────────────────────────────────────────
-
-def detect_patterns(df):
-    if len(df) < 3: return ["—"]
-    patterns = []
-    o,h,l,c = df['open'].values, df['high'].values, df['low'].values, df['close'].values
-    i = -1
-    body = abs(c[i]-o[i]); rng = h[i]-l[i]
-    if rng > 0:
-        if (min(c[i],o[i])-l[i]) >= 2*body and (h[i]-max(c[i],o[i])) <= 0.3*body: patterns.append("🔨 Hammer (Bullish)")
-        if body/rng < 0.1: patterns.append("✳️ Doji (Reversal)")
-        if body/rng > 0.85: patterns.append("💪 Marubozu " + ("Bull" if c[i]>o[i] else "Bear"))
-    if c[-2]<o[-2] and c[i]>o[i] and body>abs(c[-2]-o[-2]): patterns.append("🟢 Bullish Engulfing")
-    return patterns or ["— No Pattern"]
 
 def volume_analysis(df):
     if 'volume' not in df.columns or len(df)<20: return 0,"N/A",False
     avg = df['volume'].rolling(20).mean().iloc[-1]
     last = df['volume'].iloc[-1]
     ratio = safe_float(last/avg) if avg>0 else 0
-    return ratio, f"{ratio:.1f}x", ratio>=1.2 # Direlaksasi ke 1.2x
+    return ratio, f"{ratio:.1f}x", ratio>=1.2 # Relaksasi volume
 
 def score_ticker(df):
-    if df.empty or len(df)<50: return 0,{}
+    if df.empty or len(df)<40: return 0,{}
     df = df.copy()
     df['ema20'] = ta.ema(df['close'], length=20)
     df['ema50'] = ta.ema(df['close'], length=50)
@@ -105,99 +78,106 @@ def score_ticker(df):
     macd = ta.macd(df['close'])
     df['macd'] = macd.iloc[:,0] if macd is not None else 0
     df['sig'] = macd.iloc[:,1] if macd is not None else 0
-    bb = ta.bbands(df['close'])
-    df['bb_l'] = bb.iloc[:,0] if bb is not None else df['close']
-
+    
     l = df.iloc[-1]
     cl, e20, e50, rsi = safe_float(l['close']), safe_float(l['ema20']), safe_float(l['ema50']), safe_float(l['rsi'])
     
-    # 1. TREND (Max 30) - Bobot dinaikkan
     ts = 0
     if cl > e20: ts += 15
     if cl > e50: ts += 15
     
-    # 2. MOMENTUM (Max 30)
     ms = 0
-    if 40 <= rsi <= 70: ms += 20 # Range RSI lebih luas
-    elif rsi < 40: ms += 10 # Potensi oversold
-    if safe_float(l['macd']) > safe_float(l['sig']): ms += 10
+    if 35 <= rsi <= 72: ms += 25 # RSI lebih toleran
+    if safe_float(l['macd']) > safe_float(l['sig']): ms += 15
     
-    # 3. VOLUME (Max 20)
     vr, _, _ = volume_analysis(df)
-    vs = min(int(vr * 10), 20)
-    
-    # 4. BB & PATTERN (Max 20)
-    ps = 0
-    if cl <= safe_float(l['bb_l']) * 1.01: ps += 10
-    if "Engulfing" in str(detect_patterns(df)): ps += 10
+    vs = min(int(vr * 10), 30) # Bobot volume
 
-    score = min(ts + ms + vs + ps, 100)
-    return score, {'Trend':ts, 'Momentum':ms, 'Volume':vs, 'Extra':ps}
+    score = min(ts + ms + vs, 100)
+    return score, {'Trend':ts, 'Momentum':ms, 'Volume':vs}
 
 def get_signal(df, score):
     l = df.iloc[-1]
     cl = safe_float(l['close'])
     rsi = safe_float(l['rsi'] if 'rsi' in df.columns else 50)
     e20 = safe_float(l['ema20'] if 'ema20' in df.columns else cl)
-    macd = safe_float(l['macd'] if 'macd' in df.columns else 0)
-    sig = safe_float(l['sig'] if 'sig' in df.columns else 0)
     atr = safe_float(ta.atr(df['high'], df['low'], df['close']).iloc[-1]) if len(df)>14 else cl*0.02
 
-    sl = cl - (1.8 * atr); tp = cl + (2.5 * atr)
+    sl = cl - (1.8 * atr); tp = cl + (3 * atr)
     rr = round((tp-cl)/(cl-sl), 2) if (cl-sl)>0 else 0
 
-    # Logika Signal Lebih Adaptif
-    if score >= 70 and macd > sig: return "⚡ STRONG BUY", "#00ff99", sl, tp, rr
-    elif score >= 55 and cl > e20: return "✅ BUY", "#44dd88", sl, tp, rr
-    elif rsi > 75: return "❌ SELL/AVOID", "#ff4466", sl, tp, rr
-    elif score < 40: return "⚠️ WEAK/SKIP", "#ff8844", sl, tp, rr
+    if score >= 70: return "⚡ STRONG BUY", "#00ff99", sl, tp, rr
+    elif score >= 45 or cl > e20: return "✅ BUY", "#44dd88", sl, tp, rr
+    elif rsi > 78: return "❌ SELL/AVOID", "#ff4466", sl, tp, rr
     else: return "🔄 HOLD/WATCH", "#ffcc00", sl, tp, rr
 
 # ─────────────────────────────────────────────────────────
 # UI RENDER
 # ─────────────────────────────────────────────────────────
 
-st.markdown("<h1 style='text-align:center; color:#00bbff;'>⚡ IDX TERMINAL v4.1</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center; color:#00bbff;'>⚡ IDX TERMINAL v4.2</h1>", unsafe_allow_html=True)
 
-# Market Pulse (Sederhana)
-ihsg = yf.download("^JKSE", period="5d", progress=False)
-if not ihsg.empty:
-    curr = ihsg['Close'].iloc[-1]
-    prev = ihsg['Close'].iloc[-2]
-    diff = ((curr-prev)/prev)*100
-    st.metric("IHSG Composite", f"{curr:,.2f}", f"{diff:+.2f}%")
+# MARKET PULSE (FIXED VERSION)
+col_ihsg, col_sector = st.columns([1,1])
+with col_ihsg:
+    st.subheader("📈 IHSG Market Pulse")
+    try:
+        raw_ihsg = yf.download("^JKSE", period="1y", progress=False)
+        ihsg_df = clean_df(raw_ihsg)
+        if not ihsg_df.empty and len(ihsg_df) >= 2:
+            curr = safe_float(ihsg_df['close'].iloc[-1])
+            prev = safe_float(ihsg_df['close'].iloc[-2])
+            diff = ((curr - prev) / prev) * 100
+            
+            fig_ihsg = go.Figure(go.Scatter(x=ihsg_df.index, y=ihsg_df['close'], fill='tozeroy', line_color='#00bbff'))
+            fig_ihsg.update_layout(height=200, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark', xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig_ihsg, use_container_width=True)
+            
+            ca, cb = st.columns(2)
+            ca.metric("Last", f"{curr:,.2f}")
+            cb.metric("Change", f"{diff:+.2f}%")
+    except: st.write("Data IHSG tidak tersedia")
+
+with col_sector:
+    st.subheader("🗺️ Sector Heatmap (5D)")
+    sec_data = []
+    for s, t in SECTOR_PROXY.items():
+        try:
+            d = clean_df(yf.download(f"{t}.JK", period="10d", progress=False))
+            if not d.empty and len(d) >= 5:
+                perf = ((d['close'].iloc[-1] - d['close'].iloc[-5]) / d['close'].iloc[-5]) * 100
+                sec_data.append({"Sektor": s, "Perf": round(perf, 2), "Size": 10})
+        except: continue
+    if sec_data:
+        fig_tree = px.treemap(pd.DataFrame(sec_data), path=['Sektor'], values='Size', color='Perf', color_continuous_scale='RdYlGn')
+        fig_tree.update_layout(height=230, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark')
+        st.plotly_chart(fig_tree, use_container_width=True)
 
 st.divider()
 
-# Analysis Section
-col1, col2 = st.columns([1, 3])
-with col1:
-    ticker_input = st.text_input("Masukkan Kode Saham (contoh: BBRI):", "BBCA").upper()
-    ticker = ticker_input if ticker_input.endswith(".JK") else f"{ticker_input}.JK"
-    period = st.selectbox("Periode:", ["6mo", "1y", "2y"], index=1)
+# DEEP ANALYSIS
+ticker_in = st.text_input("🔍 Kode Saham:", "BBRI").upper()
+ticker = ticker_in if ticker_in.endswith(".JK") else f"{ticker_in}.JK"
 
-with st.spinner(f"Menganalisis {ticker}..."):
-    data = yf.download(ticker, period=period, progress=False)
-    df = clean_df(data)
-    
-    if not df.empty and len(df) > 50:
-        score, details = score_ticker(df)
-        signal, color, sl, tp, rr = get_signal(df, score)
+with st.spinner(f"Analisis {ticker}..."):
+    df = clean_df(yf.download(ticker, period="1y", progress=False))
+    if not df.empty and len(df) > 40:
+        score, _ = score_ticker(df)
+        signal, sig_color, sl, tp, rr = get_signal(df, score)
+        l = df.iloc[-1]
         
-        with col2:
-            c1, c2, c3 = st.columns(3)
-            c1.markdown(f"<div class='metric-card'>Score<br><span class='score-high'>{score}/100</span></div>", unsafe_allow_html=True)
-            c2.markdown(f"<div class='metric-card'>Signal<br><span style='color:{color}; font-size:24px; font-weight:bold;'>{signal}</span></div>", unsafe_allow_html=True)
-            c3.markdown(f"<div class='metric-card'>R:R Ratio<br><span style='font-size:24px;'>1:{rr}</span></div>", unsafe_allow_html=True)
+        c1, c2, c3, c4 = st.columns(4)
+        c1.markdown(f"<div class='metric-card'>Score<br><span class='score-high'>{score}/100</span></div>", unsafe_allow_html=True)
+        c2.markdown(f"<div class='metric-card'>Signal<br><span style='color:{sig_color}; font-size:22px;'>{signal}</span></div>", unsafe_allow_html=True)
+        c3.metric("RSI", f"{safe_float(l['rsi']):.1f}")
+        c4.metric("R:R Ratio", f"1:{rr}")
 
-            # Chart
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1, row_heights=[0.7, 0.3])
-            fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'], name="Price"), row=1, col=1)
-            fig.add_trace(go.Bar(x=df.index, y=df['volume'], name="Volume", marker_color="gray"), row=2, col=1)
-            fig.update_layout(height=500, template="plotly_dark", xaxis_rangeslider_visible=False)
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Trading Plan
-            st.info(f"**Trading Plan {ticker_input}:** Entry: {df['close'].iloc[-1]:,.0f} | Stop Loss: {sl:,.0f} | Take Profit: {tp:,.0f}")
-    else:
-        st.error("Data tidak cukup atau ticker tidak ditemukan.")
+        # Plotly Chart Detail
+        fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05, row_heights=[0.7, 0.3])
+        fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'], name="Price"), row=1, col=1)
+        fig.add_trace(go.Bar(x=df.index, y=df['volume'], name="Volume"), row=2, col=1)
+        fig.update_layout(height=600, template="plotly_dark", xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.success(f"**Trading Plan {ticker_in}:** Entry: {l['close']:,.0f} | Stop Loss: {sl:,.0f} | Take Profit: {tp:,.0f}")
+    else: st.error("Data tidak ditemukan.")
