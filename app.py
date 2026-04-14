@@ -7,6 +7,10 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime
+# ── BARU v4 ──────────────────────────────────────────────
+import concurrent.futures
+import time
+# ─────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────
 # CONFIG
@@ -79,6 +83,76 @@ IDX_SMC = [
     "ENRG","BIPI","BSIM","MDIY","CDIA","BBTN","MEGA","MLPT","NSSS","MSIN"
 ]
 
+# ── BARU v4 — ~400 SAHAM BEI AKTIF YANG DIKURASI ────────
+# Kriteria kurasi: volume rata-rata > 500 lot/hari, tidak suspenden,
+# tidak dalam proses delisting, tercatat aktif di BEI.
+# Ini GABUNGAN dari semua indeks di atas + ekspansi ke emiten aktif lain.
+IDX_ALL_ACTIVE = list(dict.fromkeys([
+    # === BLUE CHIP & INDEKS ===
+    *IDX80, *IDX_GROWTH30, *IDX_SMC, *IDX_HIDIV20,
+
+    # === PERBANKAN & FINANCE TAMBAHAN ===
+    "AGRO","BABP","BACA","BCIC","BDMN","BGTG","BJBR","BJTM","BKSW","BNBA",
+    "BNII","BNLI","BPBB","BSWD","BTPN","BVIC","DNAR","INPC","MAYA","MCOR",
+    "MEGA","NOBU","PNBS","SDRA","AGRS","AMAR","BBSI","BBYB","BCAP","BFIN",
+    "CFIN","DEFI","HDFA","HOME","IMJS","KREN","LPGI","MFIN","MTFN","PADI",
+    "PBID","TRIM","VRNA","WOMF",
+
+    # === ENERGI & TAMBANG ===
+    "ADMR","BOSS","BSSR","BTEK","BULL","BUMI","DEWA","ELSA","ESSA","FIRE",
+    "GTSI","HRUM","INDY","KKGI","MBAP","MYOH","PKPK","PTRO","RUIS","SMMT",
+    "SMRU","TOBA","ARII","BRAU","CITA","DSSA","FIRE","GTBO","HATA","INDY",
+    "ITMG","KKGI","MBAP","MCOL","PTBA","RUIS","TOBA",
+
+    # === PROPERTI & KONSTRUKSI ===
+    "ACST","ADHI","APLN","ASRI","BEST","BIKA","BIPP","BKDP","BKSL","COWL",
+    "CSAP","DGIK","DILD","DMAS","DUTI","ELTY","EMDE","EPMT","FMII","GAMA",
+    "GMTD","GPRA","GWSA","JRPT","KIJA","LAND","LCGP","LPCK","LPKR","MDLN",
+    "MKPI","MTLA","NIRO","OMRE","PANI","PJAA","PUDP","PWON","RDTX","RODA",
+    "SCBD","SGRO","SMDM","SMRA","SSIA","TARA","WIKA","WSKT","TOTL","NRCA",
+
+    # === CONSUMER & RETAIL ===
+    "AISA","ALTO","CAMP","CEKA","CLEO","CNKO","COCO","CSMI","DAVO","DLTA",
+    "DMND","FOOD","GOOD","HOKI","ICBP","IKAN","INDF","KEJU","KINO","LPPF",
+    "LSIP","MAPI","MAPB","MBTO","MERK","MIDI","MLBI","MNKI","MRAT","MYOR",
+    "NFCX","PCAR","PZZA","RANC","RICY","ROTI","SCCO","SIDO","SKBM","SKLT",
+    "SMAR","SRTG","SSSS","STTP","TBLA","TCID","TGKA","TSPC","ULTJ","UNVR",
+    "WIIM","WOOD","AALI","BWPT","DSNG","GZCO","JAWA","LSIP","PALM","SGRO",
+    "SIMP","TAPG","UNSP","SSMS",
+
+    # === KESEHATAN & FARMASI ===
+    "DVLA","INAF","KAEF","KLBF","MIKA","PRDA","PYFA","SAME","SILO","SILO",
+    "HEAL","SOHO","SIDO","IRRA","OMED","PEHA","PRIM","RSGK","TSPC","MDRN",
+
+    # === INFRASTRUKTUR & TELKO ===
+    "BTEL","CENT","EXCL","FREN","GOLD","HALO","ISAT","META","MNCN","MTEL",
+    "MYII","PGAS","SUPR","TBIG","TLKM","TOWR","TELE","TRIO","VKTR","WIFI",
+    "WTON","JSMR","CMNP","INDY","META","NELY","PTIS","RAJA",
+
+    # === INDUSTRI DASAR & KIMIA ===
+    "AGII","AKPI","ALDO","ALKA","ALMI","AMFG","APII","ARNA","BRNA","BTON",
+    "CTBN","DPNS","EKAD","GDST","IGAR","IGLAS","IMPC","INAI","INCI","INKP",
+    "INRU","INTP","ISSP","JTPE","JPRS","KDSI","KIAS","KPIG","LION","LMSH",
+    "MARK","MDKA","MLIA","NIKL","NCKL","PICO","SIAP","SINI","SMCB","SMGR",
+    "SPMA","SRSN","TBMS","TKIM","TPIA","TRST","UNIC","VOKS","WSBP","AMRT",
+
+    # === TEKNOLOGI & DIGITAL ===
+    "ARTO","BELI","BUKA","CASH","CHIP","DCII","DIVA","EMTK","GOTO","IPTV",
+    "KIOS","MTDL","NFCX","POSA","SFAN","ATIC","AXIO","KREN","LUCK","MCAS",
+    "MPPA","MSIN","MSKY","NETV","OASA","OMED","RELI","TELE","TGRA","VKTR",
+
+    # === TRANSPORTASI & LOGISTIK ===
+    "APOL","ASSA","BIRD","BLTZ","BPTR","BULL","CASS","CMPP","GIAA","GOOD",
+    "IATA","INDX","IPCC","JTPE","LEAD","LNDF","MBSS","MIRA","NELY","PTIS",
+    "RAJA","SAFE","SMDR","SOCI","TMAS","TNCA","TPMA","TRUK","WEHA","WINS",
+
+    # === AGRIKULTUR ===
+    "AALI","ANJT","BWPT","DSNG","GZCO","JAWA","LSIP","MAGP","MGRO","PALM",
+    "SGRO","SIMP","SMAR","SSMS","TBLA","UNSP","TGRA","CPRO","IIKP","MBSS",
+]))
+
+# ─────────────────────────────────────────────────────────
+
 MANUAL_SECTORS = {
     "FINANCE":    ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","PNBN","MEGA","BDMN","NISP","BTPN","BBHI","BSIM","BBTN","BNLI","BBSI"],
     "ENERGY":     ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","ENRG","GEMS","AADI","BYAN","DSSA","TCPI","INDY","BIPI"],
@@ -91,13 +165,15 @@ MANUAL_SECTORS = {
 }
 
 INDEX_UNIVERSE = {
-    "IDX30 (Blue Chip, ~30 saham)":       IDX30,
-    "LQ45 (Liquid 45, ~45 saham)":        LQ45,
-    "IDX80 (Broad Market, ~80 saham)":    IDX80,
-    "IDX High Dividend 20":               IDX_HIDIV20,
-    "IDX Growth30":                        IDX_GROWTH30,
-    "IDX SMC Liquid (Small-Mid Cap)":     IDX_SMC,
-    "ALL IDX (Combined, ~180 unik)":      list(dict.fromkeys(IDX80 + IDX_GROWTH30 + IDX_SMC + IDX_HIDIV20)),
+    "IDX30 (Blue Chip, ~30 saham)":           IDX30,
+    "LQ45 (Liquid 45, ~45 saham)":            LQ45,
+    "IDX80 (Broad Market, ~80 saham)":        IDX80,
+    "IDX High Dividend 20":                   IDX_HIDIV20,
+    "IDX Growth30":                            IDX_GROWTH30,
+    "IDX SMC Liquid (Small-Mid Cap)":         IDX_SMC,
+    "ALL IDX Combined (~180 unik)":           list(dict.fromkeys(IDX80 + IDX_GROWTH30 + IDX_SMC + IDX_HIDIV20)),
+    # ── BARU v4 ─────────────────────────────────────────
+    "🆕 ALL BEI Aktif (~400 saham, parallel)": IDX_ALL_ACTIVE,
 }
 
 SECTOR_PROXY = {
@@ -126,7 +202,7 @@ def safe_float(val, default=0.0):
     except: return default
 
 # ─────────────────────────────────────────────────────────
-# ANALYSIS ENGINE — REVISED FOR AGGRESSIVE DAILY TRADE
+# ANALYSIS ENGINE
 # ─────────────────────────────────────────────────────────
 
 def detect_patterns(df):
@@ -151,7 +227,6 @@ def detect_patterns(df):
     return patterns or ["— No Pattern"]
 
 def volume_analysis(df):
-    """Original v3 logic. surge threshold 1.5x. Returns (ratio, label, is_surge, is_surge) for compat."""
     if 'volume' not in df.columns or len(df)<20: return 0,"N/A",False,False
     avg = df['volume'].rolling(20).mean().iloc[-1]
     last = df['volume'].iloc[-1]
@@ -162,7 +237,6 @@ def volume_analysis(df):
     return ratio, label, is_surge, is_surge
 
 def score_ticker(df, mode="aggressive"):
-    """Multi-factor score 0-100. Original v3 logic."""
     if df.empty or len(df) < 52: return 0, {}
     df = df.copy()
     df['ema20'] = ta.ema(df['close'], length=20)
@@ -185,14 +259,12 @@ def score_ticker(df, mode="aggressive"):
     rsi=safe_float(l['rsi']); macd=safe_float(l['macd']); sig=safe_float(l['sig'])
     hist=safe_float(l['hist']); bb_l=safe_float(l['bb_l']); bb_m=safe_float(l['bb_m'])
 
-    # 1. TREND (0-25)
     ts=0
     if cl>e20: ts+=12
     if cl>e50: ts+=8
     gap=(cl-e20)/e20*100 if e20 else 0
     if -1<=gap<=3: ts+=5
 
-    # 2. MOMENTUM (0-25)
     ms=0
     if 40<=rsi<=60: ms+=15
     elif 30<=rsi<40 or 60<rsi<=65: ms+=8
@@ -200,16 +272,13 @@ def score_ticker(df, mode="aggressive"):
     if hist>0 and len(df)>1 and safe_float(df['hist'].iloc[-2])>=0 and hist>safe_float(df['hist'].iloc[-2]):
         ms+=3
 
-    # 3. VOLUME (0-20)
     vr,_,is_surge,_ = volume_analysis(df)
     vs=min(int(vr*8),20)
 
-    # 4. BB ZONE (0-15)
     bs=0
     if cl<=bb_l*1.01: bs=15
     elif cl<=bb_m: bs=7
 
-    # 5. PATTERN (0-15)
     pats=detect_patterns(df); ps=0
     for p in pats:
         if any(k in p for k in ['Engulfing','Morning Star','Hammer','Marubozu']): ps=15; break
@@ -220,7 +289,6 @@ def score_ticker(df, mode="aggressive"):
     return score, detail
 
 def get_signal(df, score, mode="aggressive"):
-    """Original v3 signal logic."""
     l=df.iloc[-1]
     cl=safe_float(l['close']); e20=safe_float(l['ema20'] if 'ema20' in df.columns else l['close'])
     e50=safe_float(l['ema50'] if 'ema50' in df.columns else l['close'])
@@ -238,8 +306,23 @@ def get_signal(df, score, mode="aggressive"):
     elif score<40:                                      return "⚠️ WEAK/SKIP","#ff8844",sl,tp,rr
     else:                                               return "🔄 HOLD/WATCH","#ffcc00",sl,tp,rr
 
+# ── BARU v4 — Cache per hari ──────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)   # cache 1 jam
+def analyze_full_cached(ticker, period="6mo"):
+    """
+    Versi cached dari analyze_full.
+    ttl=3600 → data di-refresh otomatis tiap 1 jam,
+    jadi tidak perlu download ulang kalau scan 2–3x dalam sesi yang sama.
+    """
+    return _analyze_full_core(ticker, period)
+
 def analyze_full(ticker, period="1y"):
-    df=yf.download(ticker,period=period,progress=False); df=clean_df(df)
+    """Dipakai untuk Deep Analysis (tidak dicache supaya selalu fresh)."""
+    return _analyze_full_core(ticker, period)
+
+def _analyze_full_core(ticker, period="6mo"):
+    """Core logic analisis, dipanggil oleh kedua fungsi di atas."""
+    df=yf.download(ticker, period=period, progress=False); df=clean_df(df)
     if df.empty or len(df)<52: return None
     df['ema20']=ta.ema(df['close'],length=20); df['ema50']=ta.ema(df['close'],length=50)
     df['rsi']=ta.rsi(df['close'],length=14); df['atr']=ta.atr(df['high'],df['low'],df['close'],length=14)
@@ -255,6 +338,155 @@ def analyze_full(ticker, period="1y"):
         df['bb_u']=df['bb_m']=df['bb_l']=df['close']
     df['vol_ma20']=df['volume'].rolling(20).mean()
     return df
+
+# ── BARU v4 — PRE-FILTER VOLUME (sebelum analisis penuh) ─
+def quick_volume_check(ticker, min_avg_lot=500):
+    """
+    Download hanya 10 hari terakhir untuk cek volume.
+    Jauh lebih cepat dari download full.
+    Return True kalau layak dilanjutkan ke analisis penuh.
+    """
+    try:
+        d = yf.download(ticker, period="10d", progress=False)
+        d = clean_df(d)
+        if d.empty or 'volume' not in d.columns: return False
+        avg_vol = d['volume'].mean()
+        # 1 lot = 100 lembar. min_avg_lot default 500 lot = 50.000 lembar
+        return safe_float(avg_vol) >= (min_avg_lot * 100)
+    except:
+        return False
+
+# ── BARU v4 — PARALLEL WORKER ─────────────────────────────
+def _scan_one(args):
+    """
+    Worker function untuk 1 ticker, dijalankan di thread pool.
+    Return dict hasil atau None kalau tidak lolos filter.
+    """
+    (ticker, min_score, signal_filter, require_above_ema,
+     min_vol_ratio, require_surge, require_macd_bull,
+     min_rsi, max_rsi, min_avg_lot, use_vol_prefilter) = args
+
+    ticker_name = ticker.replace(".JK","")
+
+    try:
+        # STEP 1: Pre-filter volume (hanya kalau opsi aktif)
+        if use_vol_prefilter:
+            if not quick_volume_check(ticker, min_avg_lot):
+                return None, ticker_name, "Vol Pre-filter", f"Avg vol < {min_avg_lot} lot/hari"
+
+        # STEP 2: Analisis penuh (dengan cache)
+        d = analyze_full_cached(ticker, period="6mo")
+        if d is None or d.empty:
+            return None, ticker_name, "Data", "Data kosong atau < min candle"
+
+        last = d.iloc[-1]
+        rsi_q  = safe_float(last.get('rsi',  50))
+        cl_q   = safe_float(last.get('close', 0))
+        ema_q  = safe_float(last.get('ema20', cl_q))
+        macd_v = safe_float(last.get('macd',  0))
+        sig_v2 = safe_float(last.get('sig',   0))
+
+        if not (min_rsi <= rsi_q <= max_rsi):
+            return None, ticker_name, "RSI", f"RSI={rsi_q:.1f} di luar [{min_rsi}–{max_rsi}]"
+
+        if require_above_ema:
+            if cl_q < ema_q:
+                return None, ticker_name, "EMA20", f"Harga {cl_q:,.0f} < EMA20 {ema_q:,.0f}"
+        else:
+            gap_pct = (cl_q - ema_q) / ema_q * 100 if ema_q > 0 else 0
+            if gap_pct < -1.5:
+                return None, ticker_name, "EMA Toleransi", f"Gap EMA={gap_pct:.1f}%"
+
+        sc_val, sc_det = score_ticker(d)
+        if sc_val < min_score:
+            return None, ticker_name, "Score", f"Score={sc_val} < min {min_score}"
+
+        sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val)
+        if "SELL" in sig or "WEAK" in sig:
+            return None, ticker_name, "Signal", f"Signal={sig}"
+        if signal_filter == "Strong BUY Only" and "STRONG" not in sig:
+            return None, ticker_name, "Signal Filter", f"Butuh STRONG BUY, dapat {sig}"
+        if signal_filter == "Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig:
+            return None, ticker_name, "Signal Filter", f"Bukan BUY: {sig}"
+
+        vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(d)
+        if require_surge and not vsurge_light:
+            return None, ticker_name, "Volume", f"Vol={vr:.2f}x, butuh surge ≥1.5x"
+        if vr < min_vol_ratio:
+            return None, ticker_name, "Volume Ratio", f"Vol={vr:.2f}x < min {min_vol_ratio}x"
+
+        if require_macd_bull and macd_v <= sig_v2:
+            return None, ticker_name, "MACD", f"MACD={macd_v:.4f} <= Signal={sig_v2:.4f}"
+
+        pats = detect_patterns(d)
+        result = {
+            "Ticker":    ticker_name,
+            "Score":     sc_val,
+            "Signal":    sig,
+            "Price":     int(cl_q),
+            "RSI":       round(rsi_q, 1),
+            "Vol":       vlbl,
+            "MACD":      "✅" if macd_v > sig_v2 else "❌",
+            "EMA20":     "✅" if cl_q >= ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
+            "SL":        int(sl_v),
+            "TP":        int(tp_v),
+            "R:R":       f"1:{rr_v}",
+            "Pattern":   pats[0] if pats else "—",
+            "Trend_s":   sc_det.get('Trend', 0),
+            "Mom_s":     sc_det.get('Momentum', 0),
+            "_cl":       cl_q,
+            "_vr":       vr,
+            "_vsurge_l": vsurge_light,
+            "_vsurge_s": vsurge_strong,
+        }
+        return result, ticker_name, None, None
+
+    except Exception as e:
+        return None, ticker_name, "Exception", str(e)
+
+
+def run_parallel_scan(tickers, scan_params, max_workers=10, progress_placeholder=None, status_placeholder=None):
+    """
+    Jalankan scan paralel dengan ThreadPoolExecutor.
+    max_workers=10 → 10 ticker di-download bersamaan.
+    Aman untuk Yahoo Finance (tidak terlalu agresif).
+    """
+    args_list = [(t, *scan_params) for t in tickers]
+    results = []
+    debug_log = []
+    errors = 0
+    completed = 0
+    total = len(tickers)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_scan_one, args): args[0] for args in args_list}
+        for future in concurrent.futures.as_completed(futures):
+            completed += 1
+            ticker_raw = futures[future]
+            try:
+                result, ticker_name, gate, reason = future.result()
+                if result:
+                    results.append(result)
+                elif gate:
+                    debug_log.append({"Ticker": ticker_name, "Gugur di": gate, "Alasan": reason})
+            except Exception as e:
+                errors += 1
+                debug_log.append({"Ticker": ticker_raw.replace(".JK",""), "Gugur di": "Exception", "Alasan": str(e)})
+
+            # Update progress
+            if progress_placeholder:
+                progress_placeholder.progress(completed / total)
+            if status_placeholder:
+                eta_done = completed / total * 100
+                status_placeholder.markdown(
+                    f"⚡ Parallel scan: **{completed}/{total}** ticker diproses "
+                    f"| Kandidat: **{len(results)}** "
+                    f"| Progress: **{eta_done:.0f}%**"
+                )
+
+    return results, debug_log, errors
+
+# ─────────────────────────────────────────────────────────
 
 def calc_sr(df):
     if len(df)<20: return [],[]
@@ -281,110 +513,97 @@ def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, 
 
     pros = []; cons = []; cautions = []
 
-    # TREND
     gap_pct = (cl - e20) / e20 * 100 if e20 else 0
     if cl > e20 and cl > e50:
         pros.append(f"Harga berada di atas EMA20 ({e20:,.0f}) dan EMA50 ({e50:,.0f}), tren naik jangka pendek dan menengah masih kuat.")
     elif cl > e20 and cl <= e50:
         cautions.append(f"Harga sudah di atas EMA20 ({gap_pct:+.1f}%), tapi masih di bawah EMA50 — tren menengah belum recovery penuh.")
     elif -1.5 <= gap_pct < 0:
-        cautions.append(f"Harga sedikit di bawah EMA20 ({gap_pct:.1f}%) — masih dalam toleransi untuk setup breakout. Pantau apakah ada candle penembus.")
+        cautions.append(f"Harga sedikit di bawah EMA20 ({gap_pct:.1f}%) — masih dalam toleransi untuk setup breakout.")
     else:
         cons.append(f"Harga ({cl:,.0f}) masih di bawah EMA20 ({e20:,.0f}) dan EMA50 ({e50:,.0f}). Tren masih negatif.")
 
     if -0.5 <= gap_pct <= 3:
         pros.append(f"Posisi harga {gap_pct:+.1f}% dari EMA20 — zona entry ideal sebelum breakout terjadi.")
     elif 3 < gap_pct <= 6:
-        cautions.append(f"Harga sudah {gap_pct:.1f}% di atas EMA20. Masih acceptable untuk momentum play tapi sizing lebih kecil.")
+        cautions.append(f"Harga sudah {gap_pct:.1f}% di atas EMA20. Masih acceptable tapi sizing lebih kecil.")
     elif gap_pct > 6:
-        cautions.append(f"Harga {gap_pct:.1f}% di atas EMA20 — sudah cukup jauh, risiko koreksi ke EMA20 meningkat.")
+        cautions.append(f"Harga {gap_pct:.1f}% di atas EMA20 — risiko koreksi ke EMA20 meningkat.")
 
-    # MOMENTUM — RSI (revised interpretation)
     if 55 <= rsi <= 72:
-        pros.append(f"RSI {rsi:.1f} berada di zona momentum prime (55–72). Ini sweet spot untuk daily trade breakout — cukup kuat tapi belum overbought ekstrem.")
+        pros.append(f"RSI {rsi:.1f} berada di zona momentum prime (55–72). Sweet spot untuk daily trade breakout.")
     elif 40 <= rsi < 55:
         pros.append(f"RSI {rsi:.1f} di zona akumulasi — saham sedang istirahat dan siap kembali naik.")
     elif rsi < 35:
-        pros.append(f"RSI {rsi:.1f} oversold ekstrem — peluang rebound teknikal sangat tinggi, tapi pastikan ada konfirmasi candle bullish.")
+        pros.append(f"RSI {rsi:.1f} oversold ekstrem — peluang rebound teknikal sangat tinggi.")
     elif 72 < rsi <= 78:
-        cautions.append(f"RSI {rsi:.1f} mulai panas. Masih bisa lanjut kalau volume kuat, tapi kurangi sizing dan perketat SL.")
+        cautions.append(f"RSI {rsi:.1f} mulai panas. Kurangi sizing dan perketat SL.")
     elif rsi > 78:
-        cons.append(f"RSI {rsi:.1f} overbought berlebihan (>78). Probabilitas koreksi dalam 1–2 hari sangat tinggi. Hindari entry baru.")
+        cons.append(f"RSI {rsi:.1f} overbought berlebihan (>78). Hindari entry baru.")
 
-    # MACD
     if macd > sig:
         hist_val = safe_float(l['hist'] if 'hist' in df.columns else 0)
         prev_hist = safe_float(df['hist'].iloc[-2] if 'hist' in df.columns and len(df)>1 else 0)
         if hist_val > prev_hist:
-            pros.append(f"MACD golden cross dan histogram terus membesar — momentum beli semakin akseleratif. Ini sinyal terkuat.")
+            pros.append(f"MACD golden cross dan histogram terus membesar — momentum beli semakin akseleratif.")
         else:
             pros.append(f"MACD di atas signal line (bullish) — tekanan beli masih dominan.")
     else:
         cons.append(f"MACD masih di bawah signal line. Tunggu golden cross untuk konfirmasi entry.")
 
-    # VOLUME — revised dengan 2 level surge
     if vsurge_strong:
-        pros.append(f"Volume {vr:.1f}x rata-rata 20 hari — surge kuat 🔥🔥. Konfirmasi institusional, breakout dengan volume ini jauh lebih reliable.")
+        pros.append(f"Volume {vr:.1f}x rata-rata 20 hari — surge kuat 🔥🔥. Konfirmasi institusional.")
     elif vsurge_light:
-        pros.append(f"Volume {vr:.1f}x rata-rata — surge ringan 🔥. Minat beli mulai masuk, perhatikan apakah volume terus meningkat di sesi berikutnya.")
+        pros.append(f"Volume {vr:.1f}x rata-rata — surge ringan 🔥. Minat beli mulai masuk.")
     elif vr >= 1.0:
-        cautions.append(f"Volume di rata-rata ({vr:.1f}x). Pergerakan belum dikonfirmasi volume besar — valid tapi waspadai false move.")
+        cautions.append(f"Volume di rata-rata ({vr:.1f}x). Pergerakan belum dikonfirmasi volume besar.")
     else:
-        cautions.append(f"Volume sepi ({vr:.1f}x rata-rata). Pergerakan harga tanpa volume solid rentan reversal tiba-tiba.")
+        cautions.append(f"Volume sepi ({vr:.1f}x rata-rata). Rentan reversal tiba-tiba.")
 
-    # BOLLINGER BAND — revised dengan skenario breakout
     if 'bb_l' in df.columns and 'bb_m' in df.columns:
         bb_l = safe_float(l['bb_l']); bb_m = safe_float(l['bb_m']); bb_u = safe_float(l['bb_u'])
         if cl <= bb_l * 1.01:
             pros.append(f"Harga menyentuh lower BB ({bb_l:,.0f}) — zona oversold BB, sering berbalik ke midband ({bb_m:,.0f}).")
         elif cl <= bb_m:
-            pros.append(f"Harga antara lower BB dan midband — zona akumulasi yang bagus untuk entry sebelum rebound ke upper band.")
+            pros.append(f"Harga antara lower BB dan midband — zona akumulasi yang bagus untuk entry.")
         elif cl > bb_m and cl < bb_u * 0.97:
             bb_width = (bb_u - bb_l) / bb_m if bb_m > 0 else 0
             if bb_width > 0.04:
-                pros.append(f"Harga di upper half BB dan bandwidth masih melebar — ini tanda momentum breakout yang sehat, bukan overbought.")
+                pros.append(f"Harga di upper half BB dan bandwidth masih melebar — tanda momentum breakout yang sehat.")
             else:
                 cautions.append(f"Harga di atas midband BB tapi bandwidth mulai menyempit — momentum bisa melambat.")
         elif cl >= bb_u * 0.97:
-            cons.append(f"Harga mendekati upper BB ({bb_u:,.0f}). Untuk reversal play hindari entry di sini; untuk momentum play, set SL ketat.")
+            cons.append(f"Harga mendekati upper BB ({bb_u:,.0f}). Set SL ketat.")
 
-    # PATTERN
     pat_str = pats[0] if pats else "—"
     if any(k in pat_str for k in ['Engulfing','Morning Star','Hammer','Marubozu']):
-        pros.append(f"Pola candlestick bullish '{pat_str.replace('🟢','').replace('🔨','').replace('🌅','').replace('💪','').strip()}' terdeteksi — konfirmasi visual pembalikan atau lanjutan naik.")
+        pros.append(f"Pola candlestick bullish terdeteksi — konfirmasi visual pembalikan atau lanjutan naik.")
     elif any(k in pat_str for k in ['Bearish','Evening Star']):
         cons.append(f"Pola bearish terdeteksi — waspada tekanan jual meningkat.")
     elif 'Doji' in pat_str:
         cautions.append(f"Pola Doji — pasar ragu-ragu. Tunggu candle konfirmasi sebelum masuk.")
 
-    # MARKET CONTEXT
     if ihsg_change > 0.5:
         pros.append(f"IHSG momentum positif ({ihsg_change:+.2f}%) — tailwind dari market secara keseluruhan.")
     elif ihsg_change < -0.5:
-        cautions.append(f"IHSG sedang melemah ({ihsg_change:+.2f}%). Bahkan setup bagus bisa ikut tertekan market.")
+        cautions.append(f"IHSG sedang melemah ({ihsg_change:+.2f}%). Setup bagus bisa ikut tertekan.")
 
-    # R:R
     if rr >= 2.0:
-        pros.append(f"Risk:Reward 1:{rr} — secara matematis menguntungkan. Risiko Rp 1 untuk potensi Rp {rr}.")
+        pros.append(f"Risk:Reward 1:{rr} — secara matematis menguntungkan.")
     elif 1.5 <= rr < 2.0:
-        cautions.append(f"R:R 1:{rr} — di batas minimum. Masih acceptable tapi jangan masuk kalau ada keraguan lain.")
+        cautions.append(f"R:R 1:{rr} — di batas minimum. Masih acceptable.")
     else:
-        cautions.append(f"R:R hanya 1:{rr} — terlalu kecil. Skip setup ini, cari entry yang lebih baik.")
+        cautions.append(f"R:R hanya 1:{rr} — terlalu kecil. Cari entry yang lebih baik.")
 
-    # VERDICT
-    score_cons = len(cons); score_pros = len(pros)
-    if "STRONG BUY" in signal or ("BUY" in signal and score_cons == 0 and score_pros >= 4):
+    score_cons = len(cons)
+    if "STRONG BUY" in signal or ("BUY" in signal and score_cons == 0 and len(pros) >= 4):
         verdict_title = f"✅ LAYAK DIBELI — Setup {name} Tergolong Kuat"
         verdict_color = "#00ff99"; confidence = "TINGGI"; conf_color = "#00ff99"
         verdict_open = f"Skor {score}/100 — saham <b>{name}</b> di Rp {cl:,.0f} menunjukkan setup beli yang kuat untuk daily trade."
-    elif "BREAKOUT WATCH" in signal:
-        verdict_title = f"🚀 BREAKOUT SETUP — {name} Siap Menerobos EMA20"
-        verdict_color = "#44aaff"; confidence = "MOMENTUM"; conf_color = "#44aaff"
-        verdict_open = f"Skor {score}/100 — <b>{name}</b> di Rp {cl:,.0f} sedang dalam posisi kritis di dekat EMA20 dengan volume mulai naik. Setup breakout yang perlu dipantau ketat."
     elif "BUY" in signal and score_cons <= 1:
         verdict_title = f"🟡 BOLEH DIPERTIMBANGKAN — Setup {name} Cukup Layak"
         verdict_color = "#ffcc00"; confidence = "SEDANG"; conf_color = "#ffcc00"
-        verdict_open = f"Skor {score}/100 — <b>{name}</b> di Rp {cl:,.0f} punya setup yang layak untuk daily trade dengan beberapa catatan."
+        verdict_open = f"Skor {score}/100 — <b>{name}</b> di Rp {cl:,.0f} punya setup yang layak dengan beberapa catatan."
     elif "SELL" in signal or "WEAK" in signal or score_cons >= 3:
         verdict_title = f"❌ TIDAK DISARANKAN — {name} Belum Siap"
         verdict_color = "#ff4466"; confidence = "RENDAH"; conf_color = "#ff4466"
@@ -392,26 +611,14 @@ def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, 
     else:
         verdict_title = f"⏳ TUNGGU KONFIRMASI — {name} Transisi"
         verdict_color = "#aaaaff"; confidence = "MENUNGGU"; conf_color = "#aaaaff"
-        verdict_open = f"Skor {score}/100 — {name} sedang transisi. Campuran sinyal positif dan negatif, tunggu konfirmasi lebih jelas."
+        verdict_open = f"Skor {score}/100 — {name} sedang transisi. Campuran sinyal positif dan negatif."
 
     if "BUY" in signal and "WEAK" not in signal:
-        closing = (
-            f"<b>Kesimpulan:</b> Entry area Rp {cl:,.0f}–{cl*1.005:,.0f}, "
-            f"SL Rp {sl:,.0f} (−{((cl-sl)/cl*100):.1f}%), "
-            f"TP Rp {tp:,.0f} (+{((tp-cl)/cl*100):.1f}%). "
-            f"Hold 1–3 hari trading."
-        )
-    elif "BREAKOUT" in signal:
-        closing = (
-            f"<b>Strategi:</b> Pantau penembusan EMA20 ({e20:,.0f}) dengan volume. "
-            f"Entry saat candle konfirmasi menutup di atas EMA20. "
-            f"SL Rp {sl:,.0f}, TP Rp {tp:,.0f}."
-        )
+        closing = (f"<b>Kesimpulan:</b> Entry area Rp {cl:,.0f}–{cl*1.005:,.0f}, "
+                   f"SL Rp {sl:,.0f} (−{((cl-sl)/cl*100):.1f}%), "
+                   f"TP Rp {tp:,.0f} (+{((tp-cl)/cl*100):.1f}%). Hold 1–3 hari trading.")
     else:
-        closing = (
-            f"<b>Alternatif:</b> Masukkan {name} ke watchlist. Tunggu RSI di 40–65 "
-            f"dan MACD golden cross sebelum entry."
-        )
+        closing = (f"<b>Alternatif:</b> Masukkan {name} ke watchlist. Tunggu RSI di 40–65 dan MACD golden cross sebelum entry.")
 
     pros_html = "".join([f"<li style='margin-bottom:6px;color:#b0ffcc'>✅ {p}</li>" for p in pros])
     cons_html = "".join([f"<li style='margin-bottom:6px;color:#ffaaaa'>❌ {c}</li>" for c in cons])
@@ -442,8 +649,7 @@ def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, 
             {closing}
         </div>
         <p style='color:#445;font-size:11px;margin-top:10px;margin-bottom:0'>
-            ⚠️ Analisis teknikal saja — tidak memperhitungkan fundamental, news, atau kondisi makro.
-            Gunakan manajemen risiko ketat. Bukan saran investasi.
+            ⚠️ Analisis teknikal saja — bukan saran investasi.
         </p>
     </div>
     """
@@ -458,29 +664,26 @@ def interpret_scanner_row(row, ihsg_change=0.0):
     vsurge  = "🔥" in str(row.get('Vol',''))
     macd_ok = row['MACD'] == "✅"
     ema_ok  = row['EMA20'] == "✅"
-    pat     = row.get('Pattern','—')
 
     reasons  = []
     warnings = []
 
-    if score >= 70:     reasons.append(f"skor tinggi ({score}/100)")
-    if vsurge:          reasons.append("volume surge 🔥")
-    if macd_ok:         reasons.append("MACD bullish")
-    if ema_ok:          reasons.append("di atas EMA20")
-    if 55 <= rsi <= 72: reasons.append(f"RSI momentum prime ({rsi})")
+    if score >= 70:      reasons.append(f"skor tinggi ({score}/100)")
+    if vsurge:           reasons.append("volume surge 🔥")
+    if macd_ok:          reasons.append("MACD bullish")
+    if ema_ok:           reasons.append("di atas EMA20")
+    if 55 <= rsi <= 72:  reasons.append(f"RSI momentum prime ({rsi})")
     elif 40 <= rsi < 55: reasons.append(f"RSI akumulasi ({rsi})")
-    elif rsi < 35:      reasons.append(f"RSI oversold ({rsi}) — potensi rebound")
+    elif rsi < 35:       reasons.append(f"RSI oversold ({rsi}) — potensi rebound")
 
-    if not ema_ok:      warnings.append("harga di bawah EMA20")
-    if not macd_ok:     warnings.append("MACD masih bearish")
-    if rsi > 75:        warnings.append(f"RSI panas ({rsi})")
-    if not vsurge:      warnings.append("volume belum surge")
+    if not ema_ok:       warnings.append("harga di bawah EMA20")
+    if not macd_ok:      warnings.append("MACD masih bearish")
+    if rsi > 75:         warnings.append(f"RSI panas ({rsi})")
+    if not vsurge:       warnings.append("volume belum surge")
     if ihsg_change < -0.5: warnings.append("IHSG melemah")
 
     if "STRONG" in signal and not warnings:
         verdict = f"🟢 <b>BUY SEKARANG</b> — {', '.join(reasons[:3])}. Setup premium."
-    elif "BREAKOUT" in signal:
-        verdict = f"🚀 <b>PANTAU BREAKOUT</b> — {', '.join(reasons[:2])}. Entry saat penembusan EMA20 konfirmasi."
     elif "BUY" in signal and len(warnings) <= 1:
         w_note = f" Perhatikan: {warnings[0]}." if warnings else ""
         verdict = f"🟡 <b>BUY sizing kecil</b> — {', '.join(reasons[:2])}.{w_note}"
@@ -497,10 +700,10 @@ def interpret_scanner_row(row, ihsg_change=0.0):
 # ─────────────────────────────────────────────────────────
 st.markdown("""
 <h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
-⚡ IDX TERMINAL v3 — SMART SCANNER
+⚡ IDX TERMINAL v4 — SMART SCANNER
 </h1>
 <p style='text-align:center;color:#445566;font-family:monospace;'>
-Multi-Factor Daily Trade Analyzer · IDX30 / LQ45 / IDX80 / Growth30 / SMC · 180+ Universe
+Multi-Factor Daily Trade Analyzer · IDX30 / LQ45 / IDX80 / Growth30 / SMC · 400+ Universe · Parallel Scan
 </p>
 """, unsafe_allow_html=True)
 
@@ -661,7 +864,6 @@ if target:
         fig.add_trace(go.Scatter(x=df.index,y=df['rsi'],line=dict(color='#bb77ff',width=1.5),name='RSI'),row=3,col=1)
         fig.add_hline(y=72,line_dash="dot",line_color="red",annotation_text="OB (72)",row=3,col=1)
         fig.add_hline(y=30,line_dash="dot",line_color="green",annotation_text="OS (30)",row=3,col=1)
-        # Tambah shading RSI prime zone (55-72) di chart
         fig.add_hrect(y0=55,y1=72,fillcolor="rgba(0,255,150,0.05)",line_width=0,row=3,col=1)
         vc=['#00ff99' if c>=o else '#ff4466' for c,o in zip(df['close'],df['open'])]
         fig.add_trace(go.Bar(x=df.index,y=df['volume']/df['volume'].max()*30,marker_color=vc,
@@ -685,10 +887,12 @@ with sc1:
 with sc2:
     also_sector = st.multiselect("➕ Tambah Sektor Manual:",list(MANUAL_SECTORS.keys()))
 with sc3:
-    # Default min score original v3
     min_score = st.slider("Min Score:",0,100,55)
 with sc4:
     top_n = st.number_input("Top N Hasil:",5,50,10)
+
+# ── Deteksi apakah universe ALL BEI dipilih ─────────────
+is_all_bei = "ALL BEI" in idx_choice
 
 selected_universe = INDEX_UNIVERSE[idx_choice]
 extra_from_sector = []
@@ -711,132 +915,135 @@ with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
     with fc1:
         min_vol_ratio=st.slider("Min Volume Ratio:",0.5,3.0,1.0,0.1)
         require_surge=st.checkbox("Wajib Volume Surge (🔥 ≥1.5x)",value=False)
-        require_surge_strong = False  # alias, tidak dipakai di original
     with fc2:
         min_rsi=st.slider("RSI Min:",10,50,30)
         max_rsi=st.slider("RSI Max:",50,90,70)
     with fc3:
         require_macd_bull=st.checkbox("Wajib MACD Bullish Cross",value=False)
         require_above_ema=st.checkbox("Wajib Price > EMA20",value=True)
-        ema_tolerance = -1.5 if not require_above_ema else 0.0
 
-# Debug mode toggle
+    # ── BARU v4 — opsi khusus ALL BEI ──────────────────
+    if is_all_bei:
+        st.divider()
+        st.markdown("**⚡ Pengaturan Parallel Scan (ALL BEI)**")
+        p1, p2, p3 = st.columns(3)
+        with p1:
+            max_workers = st.slider("Jumlah Thread Paralel:", 3, 20, 10,
+                                    help="Semakin banyak = lebih cepat, tapi risiko rate-limit YFinance lebih tinggi. Recommended: 8–12.")
+        with p2:
+            use_vol_prefilter = st.checkbox("Pre-filter volume sebelum analisis penuh",
+                                            value=True,
+                                            help="Cek volume 10 hari dulu. Ticker sepi langsung dilewati → hemat waktu ~40%.")
+            min_avg_lot = st.slider("Min avg volume (lot/hari):", 100, 2000, 500,
+                                    help="1 lot = 100 lembar. Default 500 lot = volume minimal yang layak ditrade.") if use_vol_prefilter else 500
+        with p3:
+            st.info(f"""
+            **Estimasi waktu scan:**
+            - Tanpa pre-filter: ~8–15 menit
+            - Dengan pre-filter: ~4–8 menit
+            - Thread: {max_workers if is_all_bei else 10}
+            """)
+    else:
+        max_workers = 10
+        use_vol_prefilter = False
+        min_avg_lot = 500
+
 show_debug = st.checkbox("🐛 Debug Mode — tampilkan kenapa saham kegugur", value=False)
+
+# ── INFO BANNER untuk ALL BEI ───────────────────────────
+if is_all_bei:
+    st.info(
+        f"🆕 **Mode ALL BEI Aktif** — {len(combined_universe)} saham akan di-scan secara **paralel** "
+        f"dengan {max_workers} thread. "
+        f"{'Pre-filter volume aktif → ticker sepi dilewati otomatis.' if use_vol_prefilter else 'Pre-filter volume nonaktif.'} "
+        f"Estimasi: **4–15 menit** tergantung koneksi."
+    )
 
 if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary"):
     tickers_to_scan = add_jk(combined_universe)
-    results=[]; debug_log=[]; prog=st.progress(0); status=st.empty(); errors=0
+    prog=st.progress(0); status=st.empty()
+    start_time = time.time()
 
-    for i,t in enumerate(tickers_to_scan):
-        prog.progress((i+1)/len(tickers_to_scan))
-        status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: **{len(results)}**")
-        ticker_name = t.replace(".JK","")
-        try:
-            # FIX: Gunakan analyze_full() agar semua kolom indikator tersedia
-            # analyze_full sudah handle EMA20, EMA50, RSI, MACD, BB, ATR sekaligus
-            d = analyze_full(t, period="6mo")
+    # Kumpulkan semua parameter scan
+    scan_params = (
+        min_score, signal_filter, require_above_ema,
+        min_vol_ratio, require_surge, require_macd_bull,
+        min_rsi, max_rsi, min_avg_lot, use_vol_prefilter
+    )
 
-            if d is None or d.empty:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Data", "Alasan": f"Data kosong atau < min candle"})
-                continue
-
-            last = d.iloc[-1]
-            rsi_q  = safe_float(last.get('rsi',  50))
-            cl_q   = safe_float(last.get('close', 0))
-            ema_q  = safe_float(last.get('ema20', cl_q))
-            macd_v = safe_float(last.get('macd',  0))
-            sig_v2 = safe_float(last.get('sig',   0))
-
-            # ── Gate 1: RSI filter ──
-            if not (min_rsi <= rsi_q <= max_rsi):
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "RSI", "Alasan": f"RSI={rsi_q:.1f} di luar [{min_rsi}–{max_rsi}]"})
-                continue
-
-            # ── Gate 2: EMA filter ──
-            if require_above_ema:
-                if cl_q < ema_q:
-                    if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "EMA20", "Alasan": f"Harga {cl_q:,.0f} < EMA20 {ema_q:,.0f}"})
+    if is_all_bei:
+        # ── MODE PARALEL (ALL BEI) ───────────────────────
+        status.markdown(f"⚡ Memulai parallel scan **{len(tickers_to_scan)} saham** dengan {max_workers} thread...")
+        results, debug_log, errors = run_parallel_scan(
+            tickers_to_scan, scan_params,
+            max_workers=max_workers,
+            progress_placeholder=prog,
+            status_placeholder=status
+        )
+    else:
+        # ── MODE SEQUENTIAL (Universe lain, tetap seperti v3) ──
+        results=[]; debug_log=[]; errors=0
+        for i,t in enumerate(tickers_to_scan):
+            prog.progress((i+1)/len(tickers_to_scan))
+            status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: **{len(results)}**")
+            ticker_name = t.replace(".JK","")
+            try:
+                d = analyze_full_cached(t, period="6mo")
+                if d is None or d.empty:
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Data","Alasan":"Data kosong"})
                     continue
-            else:
-                gap_pct = (cl_q - ema_q) / ema_q * 100 if ema_q > 0 else 0
-                if gap_pct < ema_tolerance:
-                    if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "EMA Toleransi", "Alasan": f"Gap EMA={gap_pct:.1f}% < toleransi {ema_tolerance}%"})
+                last=d.iloc[-1]
+                rsi_q=safe_float(last.get('rsi',50)); cl_q=safe_float(last.get('close',0))
+                ema_q=safe_float(last.get('ema20',cl_q)); macd_v=safe_float(last.get('macd',0)); sig_v2=safe_float(last.get('sig',0))
+
+                if not (min_rsi<=rsi_q<=max_rsi):
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"RSI","Alasan":f"RSI={rsi_q:.1f}"})
                     continue
+                if require_above_ema and cl_q<ema_q:
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"EMA20","Alasan":f"Harga<EMA20"})
+                    continue
+                sc_val,sc_det=score_ticker(d)
+                if sc_val<min_score:
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Score","Alasan":f"Score={sc_val}"})
+                    continue
+                sig,_,sl_v,tp_v,rr_v=get_signal(d,sc_val)
+                if "SELL" in sig or "WEAK" in sig:
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Signal","Alasan":sig})
+                    continue
+                if signal_filter=="Strong BUY Only" and "STRONG" not in sig: continue
+                if signal_filter=="Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig: continue
+                vr,vlbl,vsurge_light,vsurge_strong=volume_analysis(d)
+                if require_surge and not vsurge_light: continue
+                if vr<min_vol_ratio: continue
+                if require_macd_bull and macd_v<=sig_v2: continue
+                pats=detect_patterns(d)
+                results.append({
+                    "Ticker":ticker_name,"Score":sc_val,"Signal":sig,"Price":int(cl_q),
+                    "RSI":round(rsi_q,1),"Vol":vlbl,"MACD":"✅" if macd_v>sig_v2 else "❌",
+                    "EMA20":"✅" if cl_q>=ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
+                    "SL":int(sl_v),"TP":int(tp_v),"R:R":f"1:{rr_v}","Pattern":pats[0] if pats else "—",
+                    "Trend_s":sc_det.get('Trend',0),"Mom_s":sc_det.get('Momentum',0),
+                    "_cl":cl_q,"_vr":vr,"_vsurge_l":vsurge_light,"_vsurge_s":vsurge_strong,
+                })
+            except Exception as e:
+                errors+=1
+                if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Exception","Alasan":str(e)})
 
-            # ── Gate 3: Score ──
-            sc_val, sc_det = score_ticker(d)
-            if sc_val < min_score:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Score", "Alasan": f"Score={sc_val} < min {min_score} | Detail: {sc_det}"})
-                continue
-
-            # ── Gate 4: Signal ──
-            sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val)
-            if "SELL" in sig or "WEAK" in sig:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal", "Alasan": f"Signal={sig}"})
-                continue
-            if signal_filter == "Strong BUY Only" and "STRONG" not in sig:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal Filter", "Alasan": f"Signal={sig}, butuh STRONG BUY"})
-                continue
-            if signal_filter == "Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal Filter", "Alasan": f"Signal={sig}, bukan BUY"})
-                continue
-
-            # ── Gate 5: Volume ──
-            vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(d)
-            if require_surge_strong and not vsurge_strong:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume", "Alasan": f"Vol={vr:.2f}x, butuh surge kuat ≥1.5x"})
-                continue
-            if require_surge and not vsurge_light:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume", "Alasan": f"Vol={vr:.2f}x, butuh surge ≥1.2x"})
-                continue
-            if vr < min_vol_ratio:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume Ratio", "Alasan": f"Vol={vr:.2f}x < min {min_vol_ratio}x"})
-                continue
-
-            # ── Gate 6: MACD (opsional) ──
-            mc = macd_v; ms2 = sig_v2  # sudah dihitung di analyze_full
-            if require_macd_bull and mc <= ms2:
-                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "MACD", "Alasan": f"MACD={mc:.4f} <= Signal={ms2:.4f}"})
-                continue
-
-            pats = detect_patterns(d)
-            results.append({
-                "Ticker":    ticker_name,
-                "Score":     sc_val,
-                "Signal":    sig,
-                "Price":     int(cl_q),
-                "RSI":       round(rsi_q, 1),
-                "Vol":       vlbl,
-                "MACD":      "✅" if mc > ms2 else "❌",
-                "EMA20":     "✅" if cl_q >= ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-                "SL":        int(sl_v),
-                "TP":        int(tp_v),
-                "R:R":       f"1:{rr_v}",
-                "Pattern":   pats[0] if pats else "—",
-                "Trend_s":   sc_det.get('Trend', 0),
-                "Mom_s":     sc_det.get('Momentum', 0),
-                "_cl":       cl_q,
-                "_vr":       vr,
-                "_vsurge_l": vsurge_light,
-                "_vsurge_s": vsurge_strong,
-            })
-        except Exception as e:
-            errors += 1
-            if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Exception", "Alasan": str(e)})
-            continue
-
+    elapsed = time.time() - start_time
     prog.empty(); status.empty()
 
-    # ── Debug log ──
+    # ── Waktu scan ──────────────────────────────────────
+    st.caption(f"⏱️ Scan selesai dalam **{elapsed:.1f} detik** ({elapsed/60:.1f} menit) | "
+               f"{len(tickers_to_scan)} ticker diproses | {errors} error")
+
+    # ── Debug log ──────────────────────────────────────
     if show_debug and debug_log:
         with st.expander(f"🐛 Debug Log — {len(debug_log)} saham kegugur", expanded=True):
             df_debug = pd.DataFrame(debug_log)
-            # Summary per gate
             gate_counts = df_debug['Gugur di'].value_counts().reset_index()
             gate_counts.columns = ['Gate', 'Jumlah']
             st.markdown("**Bottleneck per Gate:**")
             st.dataframe(gate_counts, use_container_width=True, hide_index=True)
-            st.markdown("**Detail per Saham:**")
             st.dataframe(df_debug, use_container_width=True, hide_index=True)
 
     if results:
@@ -856,7 +1063,7 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         st.markdown("### 📝 Interpretasi Tiap Saham")
         for _, row in df_res.iterrows():
             score_v = row['Score']
-            sc_clr  = "#00ff99" if score_v>=70 else ("#44aaff" if "BREAKOUT" in row['Signal'] else ("#ffcc00" if score_v>=55 else "#ff4466"))
+            sc_clr  = "#00ff99" if score_v>=70 else ("#ffcc00" if score_v>=55 else "#ff4466")
             st.markdown(f"""
             <div style='background:#0a1020;border:1px solid #1e3050;border-left:3px solid {sc_clr};
                         border-radius:8px;padding:12px 16px;margin:6px 0;display:flex;
@@ -869,9 +1076,7 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
                 </div>
                 <div style='flex:1;color:#bbc;font-size:13px;line-height:1.7'>{row['Verdict']}</div>
                 <div style='min-width:110px;text-align:right;font-size:11px;color:#556'>
-                    RSI: {row['RSI']}<br>
-                    Vol: {row['Vol']}<br>
-                    MACD: {row['MACD']}<br>
+                    RSI: {row['RSI']}<br>Vol: {row['Vol']}<br>MACD: {row['MACD']}<br>
                     <span style='color:#ff6666'>SL: {row['SL']:,}</span><br>
                     <span style='color:#66ff99'>TP: {row['TP']:,}</span><br>
                     <span style='color:#aaaaff'>{row['R:R']}</span>
