@@ -842,79 +842,124 @@ with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
             help="Izinkan harga sampai berapa % di bawah EMA20. -1.5% = masih masuk jika harga max 1.5% di bawah EMA20."
         ) if not require_above_ema else 0.0
 
+# Debug mode toggle
+show_debug = st.checkbox("🐛 Debug Mode — tampilkan kenapa saham kegugur", value=False)
+
 if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary"):
     tickers_to_scan = add_jk(combined_universe)
-    results=[]; prog=st.progress(0); status=st.empty(); errors=0
+    results=[]; debug_log=[]; prog=st.progress(0); status=st.empty(); errors=0
 
     for i,t in enumerate(tickers_to_scan):
         prog.progress((i+1)/len(tickers_to_scan))
         status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: **{len(results)}**")
+        ticker_name = t.replace(".JK","")
         try:
-            # REVISED: Period scan dinaikkan ke 90d untuk cukupi min 30 candle
-            d=clean_df(yf.download(t,period="90d",progress=False))
-            min_c = 30 if mode=="aggressive" else 52
-            if d.empty or len(d)<min_c: continue
+            # FIX: Gunakan analyze_full() agar semua kolom indikator tersedia
+            # analyze_full sudah handle EMA20, EMA50, RSI, MACD, BB, ATR sekaligus
+            d = analyze_full(t, period="6mo", mode=mode)
 
-            d['ema20_q']=ta.ema(d['close'],length=20)
-            d['rsi_q']=ta.rsi(d['close'],length=14)
-            last=d.iloc[-1]
-            rsi_q=safe_float(last['rsi_q'])
-            cl_q=safe_float(last['close'])
-            ema_q=safe_float(last['ema20_q'])
+            if d is None or d.empty:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Data", "Alasan": f"Data kosong atau < min candle"})
+                continue
 
-            # RSI filter
-            if not (min_rsi<=rsi_q<=max_rsi): continue
+            last = d.iloc[-1]
+            rsi_q  = safe_float(last.get('rsi',  50))
+            cl_q   = safe_float(last.get('close', 0))
+            ema_q  = safe_float(last.get('ema20', cl_q))
+            macd_v = safe_float(last.get('macd',  0))
+            sig_v2 = safe_float(last.get('sig',   0))
 
-            # EMA filter — REVISED: support near-EMA tolerance
+            # ── Gate 1: RSI filter ──
+            if not (min_rsi <= rsi_q <= max_rsi):
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "RSI", "Alasan": f"RSI={rsi_q:.1f} di luar [{min_rsi}–{max_rsi}]"})
+                continue
+
+            # ── Gate 2: EMA filter ──
             if require_above_ema:
-                if cl_q < ema_q: continue
+                if cl_q < ema_q:
+                    if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "EMA20", "Alasan": f"Harga {cl_q:,.0f} < EMA20 {ema_q:,.0f}"})
+                    continue
             else:
-                # Toleransi: harga boleh sampai X% di bawah EMA20
-                if ema_q > 0 and (cl_q - ema_q) / ema_q * 100 < ema_tolerance: continue
+                gap_pct = (cl_q - ema_q) / ema_q * 100 if ema_q > 0 else 0
+                if gap_pct < ema_tolerance:
+                    if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "EMA Toleransi", "Alasan": f"Gap EMA={gap_pct:.1f}% < toleransi {ema_tolerance}%"})
+                    continue
 
+            # ── Gate 3: Score ──
             sc_val, sc_det = score_ticker(d, mode=mode)
-            if sc_val < min_score: continue
+            if sc_val < min_score:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Score", "Alasan": f"Score={sc_val} < min {min_score} | Detail: {sc_det}"})
+                continue
 
+            # ── Gate 4: Signal ──
             sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val, mode=mode)
-            if "SELL" in sig or "WEAK" in sig: continue
-            if signal_filter=="Strong BUY Only" and "STRONG" not in sig: continue
-            if signal_filter=="Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig: continue
+            if "SELL" in sig or "WEAK" in sig:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal", "Alasan": f"Signal={sig}"})
+                continue
+            if signal_filter == "Strong BUY Only" and "STRONG" not in sig:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal Filter", "Alasan": f"Signal={sig}, butuh STRONG BUY"})
+                continue
+            if signal_filter == "Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal Filter", "Alasan": f"Signal={sig}, bukan BUY"})
+                continue
 
+            # ── Gate 5: Volume ──
             vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(d)
-            if require_surge_strong and not vsurge_strong: continue
-            if require_surge and not vsurge_light: continue
-            if vr < min_vol_ratio: continue
+            if require_surge_strong and not vsurge_strong:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume", "Alasan": f"Vol={vr:.2f}x, butuh surge kuat ≥1.5x"})
+                continue
+            if require_surge and not vsurge_light:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume", "Alasan": f"Vol={vr:.2f}x, butuh surge ≥1.2x"})
+                continue
+            if vr < min_vol_ratio:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Volume Ratio", "Alasan": f"Vol={vr:.2f}x < min {min_vol_ratio}x"})
+                continue
 
-            macd_df2=ta.macd(d['close'],fast=12,slow=26,signal=9)
-            if macd_df2 is not None and not macd_df2.empty:
-                mc=safe_float(macd_df2.iloc[-1,0]); ms2=safe_float(macd_df2.iloc[-1,1])
-            else: mc=ms2=0
-            if require_macd_bull and mc<=ms2: continue
+            # ── Gate 6: MACD (opsional) ──
+            mc = macd_v; ms2 = sig_v2  # sudah dihitung di analyze_full
+            if require_macd_bull and mc <= ms2:
+                if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "MACD", "Alasan": f"MACD={mc:.4f} <= Signal={ms2:.4f}"})
+                continue
 
-            pats=detect_patterns(d)
+            pats = detect_patterns(d)
             results.append({
-                "Ticker":     t.replace(".JK",""),
-                "Score":      sc_val,
-                "Signal":     sig,
-                "Price":      int(cl_q),
-                "RSI":        round(rsi_q,1),
-                "Vol":        vlbl,
-                "MACD":       "✅" if mc>ms2 else "❌",
-                "EMA20":      "✅" if cl_q>=ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-                "SL":         int(sl_v),
-                "TP":         int(tp_v),
-                "R:R":        f"1:{rr_v}",
-                "Pattern":    pats[0] if pats else "—",
-                "Trend_s":    sc_det.get('Trend',0),
-                "Mom_s":      sc_det.get('Momentum',0),
-                "_cl":        cl_q,
-                "_vr":        vr,
-                "_vsurge_l":  vsurge_light,
-                "_vsurge_s":  vsurge_strong,
+                "Ticker":    ticker_name,
+                "Score":     sc_val,
+                "Signal":    sig,
+                "Price":     int(cl_q),
+                "RSI":       round(rsi_q, 1),
+                "Vol":       vlbl,
+                "MACD":      "✅" if mc > ms2 else "❌",
+                "EMA20":     "✅" if cl_q >= ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
+                "SL":        int(sl_v),
+                "TP":        int(tp_v),
+                "R:R":       f"1:{rr_v}",
+                "Pattern":   pats[0] if pats else "—",
+                "Trend_s":   sc_det.get('Trend', 0),
+                "Mom_s":     sc_det.get('Momentum', 0),
+                "_cl":       cl_q,
+                "_vr":       vr,
+                "_vsurge_l": vsurge_light,
+                "_vsurge_s": vsurge_strong,
             })
-        except: errors+=1; continue
+        except Exception as e:
+            errors += 1
+            if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Exception", "Alasan": str(e)})
+            continue
 
     prog.empty(); status.empty()
+
+    # ── Debug log ──
+    if show_debug and debug_log:
+        with st.expander(f"🐛 Debug Log — {len(debug_log)} saham kegugur", expanded=True):
+            df_debug = pd.DataFrame(debug_log)
+            # Summary per gate
+            gate_counts = df_debug['Gugur di'].value_counts().reset_index()
+            gate_counts.columns = ['Gate', 'Jumlah']
+            st.markdown("**Bottleneck per Gate:**")
+            st.dataframe(gate_counts, use_container_width=True, hide_index=True)
+            st.markdown("**Detail per Saham:**")
+            st.dataframe(df_debug, use_container_width=True, hide_index=True)
 
     if results:
         df_res=pd.DataFrame(results).sort_values("Score",ascending=False).head(top_n)
