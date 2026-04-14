@@ -150,34 +150,20 @@ def detect_patterns(df):
         if c[-3]>o[-3] and abs(c[-2]-o[-2])<0.003*c[-2] and c[i]<o[i]: patterns.append("🌇 Evening Star")
     return patterns or ["— No Pattern"]
 
-def volume_analysis(df, surge_threshold=1.2):
-    """
-    REVISED: Threshold diturunkan dari 1.5x ke 1.2x untuk menangkap lebih banyak momentum.
-    Return: (ratio, label, is_surge_light, is_surge_strong)
-    """
+def volume_analysis(df):
+    """Original v3 logic. surge threshold 1.5x. Returns (ratio, label, is_surge, is_surge) for compat."""
     if 'volume' not in df.columns or len(df)<20: return 0,"N/A",False,False
     avg = df['volume'].rolling(20).mean().iloc[-1]
     last = df['volume'].iloc[-1]
     ratio = safe_float(last/avg) if avg>0 else 0
-    is_surge_light  = ratio >= 1.2   # Surge ringan — minat mulai masuk
-    is_surge_strong = ratio >= 1.5   # Surge kuat — konfirmasi institusional
+    is_surge = ratio >= 1.5
     label = f"{ratio:.1f}x"
-    if is_surge_strong: label += " 🔥🔥"
-    elif is_surge_light: label += " 🔥"
-    return ratio, label, is_surge_light, is_surge_strong
+    if is_surge: label += " 🔥"
+    return ratio, label, is_surge, is_surge
 
 def score_ticker(df, mode="aggressive"):
-    """
-    Multi-factor score 0-100.
-
-    CHANGES vs v3 (aggressive mode):
-    1. BB Zone: Sekarang juga kasih score untuk momentum play di atas midband (tidak hanya reversal).
-    2. RSI: Zona 55-72 dapat score penuh — cocok untuk momentum/breakout play.
-    3. Volume: Threshold surge diturunkan ke 1.2x.
-    4. Min data requirement: Diturunkan ke 30 candle (dari 52).
-    """
-    min_candles = 30 if mode == "aggressive" else 52
-    if df.empty or len(df) < min_candles: return 0, {}
+    """Multi-factor score 0-100. Original v3 logic."""
+    if df.empty or len(df) < 52: return 0, {}
     df = df.copy()
     df['ema20'] = ta.ema(df['close'], length=20)
     df['ema50'] = ta.ema(df['close'], length=50)
@@ -197,62 +183,33 @@ def score_ticker(df, mode="aggressive"):
     l=df.iloc[-1]
     cl=safe_float(l['close']); e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
     rsi=safe_float(l['rsi']); macd=safe_float(l['macd']); sig=safe_float(l['sig'])
-    hist=safe_float(l['hist']); bb_l=safe_float(l['bb_l']); bb_m=safe_float(l['bb_m']); bb_u=safe_float(l['bb_u'])
+    hist=safe_float(l['hist']); bb_l=safe_float(l['bb_l']); bb_m=safe_float(l['bb_m'])
 
-    # ── 1. TREND (0-25) — tidak berubah ──
+    # 1. TREND (0-25)
     ts=0
     if cl>e20: ts+=12
     if cl>e50: ts+=8
     gap=(cl-e20)/e20*100 if e20 else 0
     if -1<=gap<=3: ts+=5
-    # Bonus kecil: breakout baru dari EMA20 (gap 3-6%) masih valid untuk momentum play
-    elif 3<gap<=6 and mode=="aggressive": ts+=3
 
-    # ── 2. MOMENTUM — RSI (0-25) — REVISED ──
+    # 2. MOMENTUM (0-25)
     ms=0
-    if mode == "aggressive":
-        # FIX: RSI 55-72 = zona momentum ideal untuk daily trade (breakout play)
-        if 55 <= rsi <= 72:   ms += 15   # Prime momentum zone
-        elif 40 <= rsi < 55:  ms += 12   # Accumulation / rebound zone
-        elif 30 <= rsi < 40:  ms += 8    # Oversold — high risk/reward rebound
-        elif 72 < rsi <= 78:  ms += 5    # Panas tapi masih bisa lanjut
-        # RSI > 78 atau < 30: dapat 0
-    else:
-        if 40<=rsi<=60: ms+=15
-        elif 30<=rsi<40 or 60<rsi<=65: ms+=8
+    if 40<=rsi<=60: ms+=15
+    elif 30<=rsi<40 or 60<rsi<=65: ms+=8
+    if macd>sig: ms+=7
+    if hist>0 and len(df)>1 and safe_float(df['hist'].iloc[-2])>=0 and hist>safe_float(df['hist'].iloc[-2]):
+        ms+=3
 
-    # MACD — tidak berubah
-    if macd > sig: ms += 7
-    if hist > 0 and len(df) > 1 and safe_float(df['hist'].iloc[-2]) >= 0 and hist > safe_float(df['hist'].iloc[-2]):
-        ms += 3
+    # 3. VOLUME (0-20)
+    vr,_,is_surge,_ = volume_analysis(df)
+    vs=min(int(vr*8),20)
 
-    # ── 3. VOLUME (0-20) — REVISED ──
-    # FIX: Pakai 4 level berbeda, threshold awal diturunkan ke 1.2x
-    vr, _, is_surge_light, is_surge_strong = volume_analysis(df)
-    if is_surge_strong:   vs = 20
-    elif is_surge_light:  vs = 14   # 1.2x–1.5x dapat 14 (sebelumnya 0 kalau < 1.5x)
-    elif vr >= 1.0:       vs = 8    # Volume rata-rata — netral
-    elif vr >= 0.8:       vs = 4
-    else:                 vs = 0
+    # 4. BB ZONE (0-15)
+    bs=0
+    if cl<=bb_l*1.01: bs=15
+    elif cl<=bb_m: bs=7
 
-    # ── 4. BB ZONE (0-15) — REVISED ──
-    # FIX: Sekarang ada 3 skenario valid, tidak hanya reversal dari lower band
-    bs = 0
-    if cl <= bb_l * 1.01:
-        bs = 15   # Skenario REVERSAL: touch lower BB (tetap sama)
-    elif cl <= bb_m:
-        bs = 8    # Skenario REBOUND: antara lower dan midband
-    elif mode == "aggressive":
-        # FIX BARU: Skenario BREAKOUT — harga di atas midband dan melebar
-        bb_width = (bb_u - bb_l) / bb_m if bb_m > 0 else 0
-        bb_prev_u = safe_float(df['bb_u'].iloc[-2]) if len(df) > 1 else bb_u
-        bb_expanding = bb_u > bb_prev_u  # Bandwidth melebar = momentum kuat
-        if cl > bb_m and cl < bb_u * 0.97 and bb_expanding:
-            bs = 10  # Breakout play — harga di upper half BB dan masih expanding
-        elif cl > bb_m and cl < bb_u * 0.97:
-            bs = 6   # Di atas midband tapi bandwidth tidak expanding
-
-    # ── 5. PATTERN (0-15) — tidak berubah ──
+    # 5. PATTERN (0-15)
     pats=detect_patterns(df); ps=0
     for p in pats:
         if any(k in p for k in ['Engulfing','Morning Star','Hammer','Marubozu']): ps=15; break
@@ -263,12 +220,7 @@ def score_ticker(df, mode="aggressive"):
     return score, detail
 
 def get_signal(df, score, mode="aggressive"):
-    """
-    REVISED:
-    - STRONG BUY: RSI threshold dinaikkan dari <65 ke <72
-    - BUY: RSI threshold dinaikkan dari <70 ke <75
-    - Tambah kondisi: breakout above EMA20 dengan volume surge dapat upgrade
-    """
+    """Original v3 signal logic."""
     l=df.iloc[-1]
     cl=safe_float(l['close']); e20=safe_float(l['ema20'] if 'ema20' in df.columns else l['close'])
     e50=safe_float(l['ema50'] if 'ema50' in df.columns else l['close'])
@@ -280,40 +232,15 @@ def get_signal(df, score, mode="aggressive"):
     sl=cl-(1.5*atr); tp=cl+(2.5*atr)
     rr=round((tp-cl)/(cl-sl),2) if (cl-sl)>0 else 0
 
-    # Volume check untuk upgrade signal
-    vr, _, is_surge_light, is_surge_strong = volume_analysis(df)
+    if score>=70 and cl>e20 and rsi<65 and macd>sig:   return "⚡ STRONG BUY","#00ff99",sl,tp,rr
+    elif score>=55 and cl>e20 and rsi<70:               return "✅ BUY","#44dd88",sl,tp,rr
+    elif rsi>75 or (cl<e50 and cl<e20 and score<35):   return "❌ SELL/AVOID","#ff4466",sl,tp,rr
+    elif score<40:                                      return "⚠️ WEAK/SKIP","#ff8844",sl,tp,rr
+    else:                                               return "🔄 HOLD/WATCH","#ffcc00",sl,tp,rr
 
-    if mode == "aggressive":
-        # FIX: RSI threshold dinaikkan — 55-72 adalah prime zone untuk momentum play
-        if score>=70 and cl>e20 and rsi<72 and macd>sig:
-            # Bonus: volume surge kuat = STRONG BUY bahkan di RSI lebih tinggi
-            if is_surge_strong and rsi < 76:
-                return "⚡ STRONG BUY","#00ff99",sl,tp,rr
-            return "⚡ STRONG BUY","#00ff99",sl,tp,rr
-        # FIX: BUY threshold RSI dinaikkan dari <70 ke <75
-        elif score>=55 and cl>e20 and rsi<75:
-            return "✅ BUY","#44dd88",sl,tp,rr
-        # FIX BARU: Near-breakout — harga baru tembus EMA20 dari bawah + volume surge
-        elif score>=50 and cl>e20*0.99 and cl<=e20*1.015 and is_surge_light and macd>sig:
-            return "🚀 BREAKOUT WATCH","#44aaff",sl,tp,rr
-        elif rsi>78 or (cl<e50 and cl<e20 and score<35):
-            return "❌ SELL/AVOID","#ff4466",sl,tp,rr
-        elif score<40:
-            return "⚠️ WEAK/SKIP","#ff8844",sl,tp,rr
-        else:
-            return "🔄 HOLD/WATCH","#ffcc00",sl,tp,rr
-    else:
-        # Mode konservatif — original logic
-        if score>=70 and cl>e20 and rsi<65 and macd>sig:   return "⚡ STRONG BUY","#00ff99",sl,tp,rr
-        elif score>=55 and cl>e20 and rsi<70:               return "✅ BUY","#44dd88",sl,tp,rr
-        elif rsi>75 or (cl<e50 and cl<e20 and score<35):   return "❌ SELL/AVOID","#ff4466",sl,tp,rr
-        elif score<40:                                      return "⚠️ WEAK/SKIP","#ff8844",sl,tp,rr
-        else:                                               return "🔄 HOLD/WATCH","#ffcc00",sl,tp,rr
-
-def analyze_full(ticker, period="1y", mode="aggressive"):
+def analyze_full(ticker, period="1y"):
     df=yf.download(ticker,period=period,progress=False); df=clean_df(df)
-    min_candles = 30 if mode == "aggressive" else 52
-    if df.empty or len(df)<min_candles: return None
+    if df.empty or len(df)<52: return None
     df['ema20']=ta.ema(df['close'],length=20); df['ema50']=ta.ema(df['close'],length=50)
     df['rsi']=ta.rsi(df['close'],length=14); df['atr']=ta.atr(df['high'],df['low'],df['close'],length=14)
     macd_df=ta.macd(df['close'],fast=12,slow=26,signal=9)
@@ -570,47 +497,12 @@ def interpret_scanner_row(row, ihsg_change=0.0):
 # ─────────────────────────────────────────────────────────
 st.markdown("""
 <h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
-⚡ IDX TERMINAL v4 — AGGRESSIVE DAILY SCANNER
+⚡ IDX TERMINAL v3 — SMART SCANNER
 </h1>
 <p style='text-align:center;color:#445566;font-family:monospace;'>
 Multi-Factor Daily Trade Analyzer · IDX30 / LQ45 / IDX80 / Growth30 / SMC · 180+ Universe
 </p>
 """, unsafe_allow_html=True)
-
-# ─────────────────────────────────────────────────────────
-# MODE SELECTOR — BARU
-# ─────────────────────────────────────────────────────────
-col_mode, col_info = st.columns([1,3])
-with col_mode:
-    trade_mode = st.radio(
-        "⚙️ Trade Mode:",
-        ["🚀 Aggressive (Daily)", "🛡️ Conservative"],
-        index=0,
-        help=(
-            "Aggressive: RSI zone 55-72, volume surge 1.2x, BB breakout play, min data 30 candle.\n"
-            "Conservative: RSI zone 40-60, volume surge 1.5x, BB reversal only, min data 52 candle."
-        )
-    )
-mode = "aggressive" if "Aggressive" in trade_mode else "conservative"
-
-with col_info:
-    if mode == "aggressive":
-        st.info(
-            "**Mode Aggressive** aktif — "
-            "RSI prime zone 55–72 ✅ | "
-            "Volume surge dari 1.2x 🔥 | "
-            "BB breakout play dihitung ✅ | "
-            "Min data 30 candle ✅ | "
-            "RSI threshold STRONG BUY dinaikkan ke <72"
-        )
-    else:
-        st.warning(
-            "**Mode Conservative** aktif — "
-            "RSI ideal 40–60 | "
-            "Volume surge 1.5x | "
-            "BB reversal only | "
-            "Min data 52 candle"
-        )
 
 st.divider()
 
@@ -683,10 +575,10 @@ elif sec_sel!="—":
 
 if target:
     with st.spinner(f"Menganalisis {target}..."):
-        df=analyze_full(target, period=tf, mode=mode)
+        df=analyze_full(target, period=tf)
     if df is not None:
-        score,detail=score_ticker(df, mode=mode)
-        signal,sig_color,sl,tp,rr=get_signal(df, score, mode=mode)
+        score,detail=score_ticker(df)
+        signal,sig_color,sl,tp,rr=get_signal(df, score)
         l=df.iloc[-1]
         pats=detect_patterns(df)
         vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
@@ -793,9 +685,8 @@ with sc1:
 with sc2:
     also_sector = st.multiselect("➕ Tambah Sektor Manual:",list(MANUAL_SECTORS.keys()))
 with sc3:
-    # Default min score diturunkan ke 50 untuk mode aggressive
-    default_min = 50 if mode == "aggressive" else 55
-    min_score = st.slider("Min Score:",0,100,default_min)
+    # Default min score original v3
+    min_score = st.slider("Min Score:",0,100,55)
 with sc4:
     top_n = st.number_input("Top N Hasil:",5,50,10)
 
@@ -818,29 +709,16 @@ st.write("")
 with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
     fc1,fc2,fc3=st.columns(3)
     with fc1:
-        # REVISED: Default min volume ratio diturunkan ke 0.8 (dari 1.0)
-        min_vol_ratio=st.slider("Min Volume Ratio:",0.5,3.0,0.8,0.1)
-        # REVISED: Default require_surge = False
-        require_surge=st.checkbox("Wajib Volume Surge (🔥 ≥1.2x)",value=False)
-        require_surge_strong=st.checkbox("Wajib Volume Surge Kuat (🔥🔥 ≥1.5x)",value=False)
+        min_vol_ratio=st.slider("Min Volume Ratio:",0.5,3.0,1.0,0.1)
+        require_surge=st.checkbox("Wajib Volume Surge (🔥 ≥1.5x)",value=False)
+        require_surge_strong = False  # alias, tidak dipakai di original
     with fc2:
-        # REVISED: Default min RSI diturunkan ke 30, max dinaikkan ke 75
         min_rsi=st.slider("RSI Min:",10,50,30)
-        max_rsi=st.slider("RSI Max:",50,90,75)
+        max_rsi=st.slider("RSI Max:",50,90,70)
     with fc3:
         require_macd_bull=st.checkbox("Wajib MACD Bullish Cross",value=False)
-        # REVISED: Default require_above_ema = False (dari True)
-        require_above_ema=st.checkbox(
-            "Wajib Price > EMA20",
-            value=False,
-            help="Matikan untuk menangkap setup near-breakout (harga baru mau tembus EMA20)"
-        )
-        # BARU: Near-EMA tolerance
-        ema_tolerance = st.slider(
-            "Toleransi EMA20 (%):",
-            -3.0, 0.0, -1.5, 0.1,
-            help="Izinkan harga sampai berapa % di bawah EMA20. -1.5% = masih masuk jika harga max 1.5% di bawah EMA20."
-        ) if not require_above_ema else 0.0
+        require_above_ema=st.checkbox("Wajib Price > EMA20",value=True)
+        ema_tolerance = -1.5 if not require_above_ema else 0.0
 
 # Debug mode toggle
 show_debug = st.checkbox("🐛 Debug Mode — tampilkan kenapa saham kegugur", value=False)
@@ -856,7 +734,7 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         try:
             # FIX: Gunakan analyze_full() agar semua kolom indikator tersedia
             # analyze_full sudah handle EMA20, EMA50, RSI, MACD, BB, ATR sekaligus
-            d = analyze_full(t, period="6mo", mode=mode)
+            d = analyze_full(t, period="6mo")
 
             if d is None or d.empty:
                 if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Data", "Alasan": f"Data kosong atau < min candle"})
@@ -886,13 +764,13 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
                     continue
 
             # ── Gate 3: Score ──
-            sc_val, sc_det = score_ticker(d, mode=mode)
+            sc_val, sc_det = score_ticker(d)
             if sc_val < min_score:
                 if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Score", "Alasan": f"Score={sc_val} < min {min_score} | Detail: {sc_det}"})
                 continue
 
             # ── Gate 4: Signal ──
-            sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val, mode=mode)
+            sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val)
             if "SELL" in sig or "WEAK" in sig:
                 if show_debug: debug_log.append({"Ticker": ticker_name, "Gugur di": "Signal", "Alasan": f"Signal={sig}"})
                 continue
@@ -1009,10 +887,10 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
             medal=["🥇","🥈","🥉"][i]
             sc_clr="#00ff99" if row['Score']>=70 else "#ffcc00"
             try:
-                df_top = analyze_full(f"{row['Ticker']}.JK", period="90d", mode=mode)
+                df_top = analyze_full(f"{row['Ticker']}.JK", period="6mo")
                 if df_top is not None:
-                    sc_v2, det_v2 = score_ticker(df_top, mode=mode)
-                    sig_v2, _, sl_v2, tp_v2, rr_v2 = get_signal(df_top, sc_v2, mode=mode)
+                    sc_v2, det_v2 = score_ticker(df_top)
+                    sig_v2, _, sl_v2, tp_v2, rr_v2 = get_signal(df_top, sc_v2)
                     pats_v2 = detect_patterns(df_top)
                     vr_v2, _, vsl_v2, vss_v2 = volume_analysis(df_top)
                     full_html, conf_lbl, conf_clr = interpret_analysis(
@@ -1056,12 +934,11 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         fig_dist=go.Figure()
         fig_dist.add_trace(go.Bar(
             x=df_res['Ticker'], y=df_res['Score'],
-            marker_color=['#00ff99' if s>=70 else ('#44aaff' if "BREAKOUT" in df_res.loc[df_res['Ticker']==t,'Signal'].values[0] else ('#ffcc00' if s>=55 else '#ff4466'))
-                          for s,t in zip(df_res['Score'],df_res['Ticker'])],
+            marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
             text=df_res['Score'], textposition='outside'
         ))
         fig_dist.add_hline(y=70,line_dash="dot",line_color="#00ff99",annotation_text="Strong Buy Zone")
-        fig_dist.add_hline(y=50,line_dash="dot",line_color="#4488ff",annotation_text="Buy Zone (Aggressive)")
+        fig_dist.add_hline(y=55,line_dash="dot",line_color="#ffcc00",annotation_text="Buy Zone")
         fig_dist.update_layout(height=300,template='plotly_dark',margin=dict(l=0,r=0,t=10,b=0),
                                 yaxis=dict(range=[0,105]),showlegend=False)
         st.plotly_chart(fig_dist,use_container_width=True)
@@ -1070,23 +947,21 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         st.subheader("📋 Morning Review — Panduan Eksekusi")
         mktbias="🟢 BULLISH" if ihsg_change>0.3 else ("🔴 BEARISH" if ihsg_change<-0.3 else "🟡 SIDEWAYS")
         strong_picks=[r['Ticker'] for _,r in df_res.iterrows() if "STRONG" in r['Signal']]
-        breakout_picks=[r['Ticker'] for _,r in df_res.iterrows() if "BREAKOUT" in r['Signal']]
         surge_picks=[r['Ticker'] for _,r in df_res.iterrows() if "🔥" in str(r.get('Vol',''))]
 
         st.markdown(f"""
         <div style='background:#0a1020;border:1px solid #1e3050;border-radius:12px;padding:20px;'>
         <b>🌐 IHSG:</b> {ihsg_df['close'].iloc[-1]:,.0f} <span style='color:{"#00ff99" if ihsg_change>0 else "#ff4466"}'>{ihsg_change:+.2f}%</span> — {mktbias}<br><br>
-        <b>⚡ Strong Buy:</b> {', '.join(strong_picks) if strong_picks else '—'}<br>
-        <b>🚀 Breakout Watch:</b> {', '.join(breakout_picks) if breakout_picks else '—'}<br>
-        <b>🔥 Volume Surge:</b> {', '.join(surge_picks) if surge_picks else '—'}<br><br>
-        <b>📌 Panduan Eksekusi ({("Mode Aggressive 🚀" if mode=="aggressive" else "Mode Conservative 🛡️")}):</b>
+        <b>⚡ Strong Buy Candidates:</b> {', '.join(strong_picks) if strong_picks else '—'}<br>
+        <b>🔥 Volume Surge Picks:</b> {', '.join(surge_picks) if surge_picks else '—'}<br><br>
+        <b>📌 Panduan Eksekusi:</b>
         <ol style='color:#99aacc;margin-top:8px'>
-        <li>Prioritaskan <b>Score ≥ 70 + Volume Surge 🔥</b> + RSI 55–72 → <b>Setup Premium Aggressive</b>.</li>
-        <li><b>Breakout Watch 🚀</b>: Entry saat candle konfirmasi menutup di atas EMA20 dengan volume naik. Jangan FOMO masuk sebelum konfirmasi.</li>
-        <li>Jika IHSG {mktbias}, {"fokus hanya setup terkuat dan sizing kecil" if "BEARISH" in mktbias else "bisa lebih agresif tapi tetap pakai SL ketat"}.</li>
-        <li>RSI 55–72 = <b>momentum prime zone</b> untuk daily trade. RSI 40–55 = akumulasi/rebound setup.</li>
-        <li>R:R wajib ≥ 1:2. Kalau R:R < 1:1.5, skip dan cari entry lebih baik.</li>
-        <li>Max 20–25% modal per saham. Untuk setup Breakout Watch, sizing 50% dulu sampai konfirmasi.</li>
+        <li>Prioritaskan saham <b>Score ≥ 70 + Volume Surge 🔥</b> → Setup Premium.</li>
+        <li>Jika IHSG {mktbias}, {"hanya masuk setup terkuat (Score ≥ 70)" if "BEARISH" in mktbias else "bisa lebih agresif tapi tetap pakai SL"}.</li>
+        <li>Masuk dekat <b>Support / EMA20</b>, bukan setelah saham sudah lari jauh.</li>
+        <li>R:R wajib ≥ 1:2 sebelum eksekusi. Skip jika R:R &lt; 1:1.5.</li>
+        <li>MACD Bullish Cross ✅ + RSI 40–60 + Volume Surge = <b>trifecta signal terkuat</b>.</li>
+        <li>Gunakan max 20–25% modal per saham. Jangan all-in satu emiten.</li>
         </ol>
         </div>
         """, unsafe_allow_html=True)
