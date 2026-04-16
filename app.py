@@ -7,20 +7,16 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import numpy as np
 from datetime import datetime, date, timedelta
-# ── BARU v4 ──────────────────────────────────────────────
 import concurrent.futures
 import time
-# ─────────────────────────────────────────────────────────
-# WIN/LOSS TRACKER — STORAGE (tambahan baru)
 import json
 from pathlib import Path
 import pytz
-# ─────────────────────────────────────────────────────────
 
-# ─────────────────────────────────────────────────────────
+# ==================================================
 # CONFIG
-# ─────────────────────────────────────────────────────────
-st.set_page_config(page_title="IDX Terminal v5", layout="wide", initial_sidebar_state="collapsed")
+# ==================================================
+st.set_page_config(page_title="IDX Terminal v5 - Day Trade Tracker", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -45,13 +41,15 @@ div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
 .win-card  { background:#002a14; border:1px solid #00ff99; border-radius:8px; padding:10px; text-align:center; }
 .loss-card { background:#2a0010; border:1px solid #ff4466; border-radius:8px; padding:10px; text-align:center; }
 .open-card { background:#001433; border:1px solid #2255aa; border-radius:8px; padding:10px; text-align:center; }
+.progress-label { font-size:12px; color:#aaa; margin-bottom:4px; }
+.progress-bar-container { background:#1e2a3a; border-radius:10px; height:8px; width:100%; margin:5px 0; }
+.progress-bar-fill { background:#00ff99; border-radius:10px; height:8px; width:0%; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────
-# UNIVERSE DATABASE — IDX OFFICIAL INDICES
-# ─────────────────────────────────────────────────────────
-
+# ==================================================
+# UNIVERSE DATABASE (sama seperti sebelumnya)
+# ==================================================
 IDX30 = [
     "AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN",
     "BMRI","BRIS","BUKA","CPIN","EXCL","GOTO","ICBP","INCO","INDF","ISAT",
@@ -164,10 +162,9 @@ SECTOR_PROXY = {
 def add_jk(tickers):
     return [t if t.endswith(".JK") else f"{t}.JK" for t in tickers]
 
-# ─────────────────────────────────────────────────────────
+# ==================================================
 # HELPERS
-# ─────────────────────────────────────────────────────────
-
+# ==================================================
 def clean_df(df):
     if df.empty: return df
     if isinstance(df.columns, pd.MultiIndex):
@@ -181,10 +178,9 @@ def safe_float(val, default=0.0):
         return default if (np.isnan(v) or np.isinf(v)) else v
     except: return default
 
-# ─────────────────────────────────────────────────────────
-# ANALYSIS ENGINE
-# ─────────────────────────────────────────────────────────
-
+# ==================================================
+# ANALYSIS ENGINE (sama)
+# ==================================================
 def detect_patterns(df):
     if len(df) < 3: return ["—"]
     patterns = []
@@ -402,7 +398,6 @@ def _scan_one(args):
     except Exception as e:
         return None, ticker_name, "Exception", str(e)
 
-
 def run_parallel_scan(tickers, scan_params, max_workers=10, progress_placeholder=None, status_placeholder=None):
     args_list = [(t, *scan_params) for t in tickers]
     results = []
@@ -446,10 +441,9 @@ def calc_sr(df):
     sup=sorted(df[df['low']==ll]['low'].dropna().unique())[:3]
     return list(res), list(sup)
 
-# ─────────────────────────────────────────────────────────
-# INTERPRETASI ENGINE
-# ─────────────────────────────────────────────────────────
-
+# ==================================================
+# INTERPRETASI ENGINE (sama)
+# ==================================================
 def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, vsurge_light, vsurge_strong, ihsg_change=0.0):
     l = df.iloc[-1]
     cl   = safe_float(l['close'])
@@ -605,7 +599,6 @@ def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, 
     """
     return html, confidence, conf_color
 
-
 def interpret_scanner_row(row, ihsg_change=0.0):
     name    = row['Ticker']
     score   = row['Score']
@@ -644,11 +637,9 @@ def interpret_scanner_row(row, ihsg_change=0.0):
 
     return verdict
 
-
-# ─────────────────────────────────────────────────────────
-# WIN/LOSS TRACKER — FUNGSI STORAGE
-# ─────────────────────────────────────────────────────────
-
+# ==================================================
+# WIN/LOSS TRACKER — REVISI UNTUK DAY TRADE 1 & 3 HARI
+# ==================================================
 TRACKER_FILE = Path("idx_trade_log.json")
 TZ_JKT = pytz.timezone("Asia/Jakarta")
 
@@ -662,7 +653,8 @@ def save_trade_log(logs: list):
     with open(TRACKER_FILE, "w") as f:
         json.dump(logs, f, indent=2, default=str)
 
-def save_scan_results_to_log(df_results: pd.DataFrame, scan_date: str = None):
+def save_scan_results_to_log(df_results: pd.DataFrame, hold_days: int, scan_date: str = None):
+    """Simpan rekomendasi dari scanner ke log dengan hold_days (1 atau 3)"""
     if scan_date is None:
         scan_date = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
     logs = load_trade_log()
@@ -683,162 +675,131 @@ def save_scan_results_to_log(df_results: pd.DataFrame, scan_date: str = None):
             "tp":         float(row["TP"]),
             "rr":         str(row["R:R"]),
             "pattern":    row.get("Pattern", "—"),
+            "hold_days":  hold_days,           # 1 atau 3
             "exit_price": None,
             "exit_date":  None,
             "status":     "OPEN",
-            "auto_resolved": False,   # flag: True = di-resolve otomatis
+            "auto_resolved": False,
             "note":       "",
         })
         new_entries += 1
     save_trade_log(logs)
     return new_entries
 
-# ─────────────────────────────────────────────────────────
-# ★ AUTO-RESOLVE ENGINE (BARU) ★
-# Dipanggil otomatis setiap halaman dibuka.
-# Logika:
-#   - Setiap trade OPEN dicek harga historisnya
-#   - Candle per candle diperiksa: High kena TP → WIN, Low kena SL → LOSS
-#   - Kalau sudah >3 hari dan belum resolve → pakai close terakhir
-#   - Resolve HANYA setelah jam 15:30 WIB (bursa sudah tutup)
-# ─────────────────────────────────────────────────────────
-
 def is_market_closed() -> tuple[bool, str]:
-    """Return (bursa_sudah_tutup, label_waktu_sekarang)."""
     now_jkt = datetime.now(TZ_JKT)
     closed = now_jkt.hour > 15 or (now_jkt.hour == 15 and now_jkt.minute >= 30)
     label = now_jkt.strftime("%H:%M WIB")
     return closed, label
 
-def auto_resolve_open_trades(max_hold_days: int = 3) -> tuple[int, int, list]:
+def get_price_progress(ticker_jk, entry, sl, tp, target_date):
     """
-    Otomatis resolve semua trade OPEN berdasarkan data harga historis.
-    Return: (jumlah_resolved, jumlah_masih_open, list_notifikasi)
+    Ambil data harga dari target_date sampai sekarang.
+    Return (current_price, highest, lowest, last_close, df_slice)
     """
-    market_closed, jam_sekarang = is_market_closed()
+    try:
+        end = datetime.now(TZ_JKT).date()
+        start = target_date - timedelta(days=1)
+        hist = clean_df(yf.download(ticker_jk, start=start, end=end + timedelta(days=1), progress=False))
+        if hist.empty:
+            return None, None, None, None, None
+        # filter mulai dari target_date
+        hist_from = hist[hist.index.date >= target_date]
+        if hist_from.empty:
+            return None, None, None, None, None
+        current_price = safe_float(hist_from['close'].iloc[-1])
+        highest = hist_from['high'].max()
+        lowest = hist_from['low'].min()
+        last_close = safe_float(hist_from['close'].iloc[-1])
+        return current_price, highest, lowest, last_close, hist_from
+    except:
+        return None, None, None, None, None
+
+def evaluate_trade_progress(ticker, entry, sl, tp, target_date, hold_days):
+    """
+    Evaluasi status trade:
+    - Jika sudah TP atau SL → return (status, exit_price, exit_date, reason, pnl_pct)
+    - Jika belum, hitung jarak ke TP/SL dan saran aksi
+    """
+    ticker_jk = ticker + ".JK"
+    curr_price, highest, lowest, last_close, hist = get_price_progress(ticker_jk, entry, sl, tp, target_date)
+    if curr_price is None:
+        return "OPEN", None, None, "Data tidak tersedia", 0, 0, 0, 0
+
+    today = datetime.now(TZ_JKT).date()
+    days_held = (today - target_date).days
+
+    # Cek apakah sudah kena TP atau SL (intraday)
+    if highest >= tp:
+        return "WIN", tp, target_date + timedelta(days=1), f"TP tercapai (high {highest:,.0f} >= {tp:,.0f})", (tp - entry)/entry*100, days_held, 0, 0
+    if lowest <= sl:
+        return "LOSS", sl, target_date + timedelta(days=1), f"SL tersentuh (low {lowest:,.0f} <= {sl:,.0f})", (sl - entry)/entry*100, days_held, 0, 0
+
+    # Jika sudah melebihi hold_days, force close di harga terakhir
+    if days_held >= hold_days:
+        pnl = (last_close - entry)/entry*100
+        return ("WIN" if pnl >= 0 else "LOSS"), last_close, today, f"Force close setelah {hold_days} hari (close {last_close:,.0f})", pnl, days_held, 0, 0
+
+    # Masih open: hitung jarak ke TP dan SL
+    dist_to_tp = (tp - curr_price) / tp * 100 if tp > 0 else 0
+    dist_to_sl = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
+    # Saran aksi
+    if dist_to_tp <= 1.5:
+        action = "🚀 Segera TP"
+    elif dist_to_sl <= 1.5:
+        action = "⚠️ Cut loss / ketatkan SL"
+    elif dist_to_tp <= 3:
+        action = "📈 Menuju TP, hold"
+    elif dist_to_sl <= 3:
+        action = "📉 Mendekati SL, waspada"
+    else:
+        action = "🟡 Hold sesuai rencana"
+
+    return "OPEN", curr_price, None, action, 0, days_held, dist_to_tp, dist_to_sl
+
+def auto_resolve_all_trades():
+    """Panggil setiap halaman dimuat untuk update semua trade OPEN"""
+    market_closed, jam = is_market_closed()
     logs = load_trade_log()
-    open_trades = [l for l in logs if l["status"] == "OPEN"]
-
-    if not open_trades:
-        return 0, 0, []
-
-    today_jkt = datetime.now(TZ_JKT).date()
-    resolved_count = 0
-    still_open_count = 0
-    notifs = []  # list of dict: {ticker, status, pnl_pct, reason}
+    updated = False
+    notifs = []
 
     for trade in logs:
         if trade["status"] != "OPEN":
             continue
 
-        scan_dt  = date.fromisoformat(trade["date"])
-        days_old = (today_jkt - scan_dt).days
-        ticker   = trade["ticker"] + ".JK"
-        entry    = float(trade["entry"])
-        sl       = float(trade["sl"])
-        tp       = float(trade["tp"])
+        target_date = date.fromisoformat(trade["date"])
+        hold_days = trade.get("hold_days", 3)  # default 3
+        ticker = trade["ticker"]
+        entry = float(trade["entry"])
+        sl = float(trade["sl"])
+        tp = float(trade["tp"])
 
-        # Belum bisa resolve kalau:
-        # 1. Scan hari ini DAN bursa belum tutup
-        if scan_dt == today_jkt and not market_closed:
-            still_open_count += 1
-            continue
+        status, exit_price, exit_date, reason, pnl, days_held, dist_tp, dist_sl = evaluate_trade_progress(
+            ticker, entry, sl, tp, target_date, hold_days
+        )
 
-        # 2. Scan hari ini DAN bursa sudah tutup → resolve dengan data hari ini
-        # 3. Scan kemarin/lusa → resolve dengan data historis
+        if status != "OPEN":
+            trade["status"] = status
+            trade["exit_price"] = exit_price
+            trade["exit_date"] = str(exit_date) if exit_date else None
+            trade["auto_resolved"] = True
+            trade["note"] = reason
+            updated = True
+            notifs.append({
+                "ticker": ticker,
+                "status": status,
+                "pnl_pct": pnl,
+                "entry": entry,
+                "exit": exit_price,
+                "reason": reason,
+                "days_held": days_held,
+                "scan_date": trade["date"],
+            })
 
-        try:
-            # Fetch OHLC sejak H-1 scan untuk pastikan dapat datanya
-            fetch_start = (scan_dt - timedelta(days=1)).isoformat()
-            hist = clean_df(yf.download(ticker, start=fetch_start, progress=False))
-            if hist.empty:
-                still_open_count += 1
-                continue
-
-            # Ambil candle mulai H scan
-            hist_from_scan = hist[hist.index.date >= scan_dt]
-            if hist_from_scan.empty:
-                still_open_count += 1
-                continue
-
-            outcome    = None
-            exit_price = None
-            exit_date  = None
-            exit_reason = ""
-
-            for dt_idx, candle in hist_from_scan.iterrows():
-                candle_date = dt_idx.date()
-                lo  = safe_float(candle['low'])
-                hi  = safe_float(candle['high'])
-                cls = safe_float(candle['close'])
-
-                # Jangan cek candle hari ini kalau bursa belum tutup
-                if candle_date == today_jkt and not market_closed:
-                    break
-
-                # TP kena (intraday high menyentuh TP)
-                if hi >= tp:
-                    outcome     = "WIN"
-                    exit_price  = tp
-                    exit_date   = str(candle_date)
-                    exit_reason = f"High {hi:,.0f} menyentuh TP {tp:,.0f}"
-                    break
-
-                # SL kena (intraday low menyentuh SL)
-                if lo <= sl:
-                    outcome     = "LOSS"
-                    exit_price  = sl
-                    exit_date   = str(candle_date)
-                    exit_reason = f"Low {lo:,.0f} menyentuh SL {sl:,.0f}"
-                    break
-
-                # Sudah max hold days → exit di harga close
-                hold_day = (candle_date - scan_dt).days
-                if hold_day >= max_hold_days:
-                    outcome     = "WIN" if cls > entry else "LOSS"
-                    exit_price  = cls
-                    exit_date   = str(candle_date)
-                    exit_reason = f"Max hold {max_hold_days} hari, close {cls:,.0f} vs entry {entry:,.0f}"
-                    break
-
-            # Jika masih belum resolve tapi sudah sangat lama (stale)
-            if not outcome and days_old > max_hold_days + 3:
-                last_cls    = safe_float(hist_from_scan['close'].iloc[-1])
-                outcome     = "WIN" if last_cls > entry else "LOSS"
-                exit_price  = last_cls
-                exit_date   = str(hist_from_scan.index[-1].date())
-                exit_reason = f"Stale (>{max_hold_days+3} hari), close terakhir {last_cls:,.0f}"
-
-            if outcome and exit_price:
-                pnl_pct = round((exit_price - entry) / entry * 100, 2)
-                trade["status"]        = outcome
-                trade["exit_price"]    = round(exit_price, 0)
-                trade["exit_date"]     = exit_date
-                trade["auto_resolved"] = True
-                trade["note"]          = f"[AUTO] {exit_reason}"
-
-                notifs.append({
-                    "ticker":  trade["ticker"],
-                    "status":  outcome,
-                    "pnl_pct": pnl_pct,
-                    "entry":   entry,
-                    "exit":    round(exit_price, 0),
-                    "reason":  exit_reason,
-                    "scan_date": trade["date"],
-                })
-                resolved_count += 1
-            else:
-                still_open_count += 1
-
-        except Exception as e:
-            still_open_count += 1
-            continue
-
-    if resolved_count > 0:
+    if updated:
         save_trade_log(logs)
-
-    return resolved_count, still_open_count, notifs
-
+    return notifs
 
 def compute_tracker_stats(logs: list) -> dict:
     closed = [l for l in logs if l["status"] in ("WIN", "LOSS")]
@@ -855,91 +816,64 @@ def compute_tracker_stats(logs: list) -> dict:
     avg_pnl   = round(sum(pnl_list) / len(pnl_list), 2) if pnl_list else 0
     total_pnl = round(sum(pnl_list), 2) if pnl_list else 0
 
-    strong_closed = [l for l in closed if "STRONG" in l["signal"]]
-    strong_wins   = [l for l in strong_closed if l["status"] == "WIN"]
-    buy_closed    = [l for l in closed if "STRONG" not in l["signal"]]
-    buy_wins      = [l for l in buy_closed if l["status"] == "WIN"]
-
-    streak = 0; streak_type = "—"
-    if closed:
-        last_status = closed[-1]["status"]
-        streak_type = "🟢 WIN" if last_status == "WIN" else "🔴 LOSS"
-        for l in reversed(closed):
-            if l["status"] == last_status:
-                streak += 1
-            else:
-                break
-
-    # Auto vs manual breakdown
-    auto_resolved  = [l for l in closed if l.get("auto_resolved")]
-    manual_resolved = [l for l in closed if not l.get("auto_resolved")]
+    # Statistik per hold_days
+    stats_1d = {"wins":0, "losses":0, "total":0}
+    stats_3d = {"wins":0, "losses":0, "total":0}
+    for l in closed:
+        hd = l.get("hold_days", 3)
+        if hd == 1:
+            stats_1d["total"] += 1
+            if l["status"] == "WIN": stats_1d["wins"] += 1
+            else: stats_1d["losses"] += 1
+        else:
+            stats_3d["total"] += 1
+            if l["status"] == "WIN": stats_3d["wins"] += 1
+            else: stats_3d["losses"] += 1
 
     return {
         "total": len(logs), "closed": len(closed),
         "wins": len(wins), "losses": len(losses), "opens": len(opens),
         "win_rate": win_rate, "avg_pnl": avg_pnl, "total_pnl": total_pnl,
-        "strong_wr": round(len(strong_wins)/len(strong_closed)*100,1) if strong_closed else 0,
-        "buy_wr":    round(len(buy_wins)/len(buy_closed)*100,1) if buy_closed else 0,
-        "streak": streak, "streak_type": streak_type,
-        "auto_count": len(auto_resolved),
-        "manual_count": len(manual_resolved),
+        "stats_1d": stats_1d, "stats_3d": stats_3d,
     }
 
-# ─────────────────────────────────────────────────────────
-# HEADER
-# ─────────────────────────────────────────────────────────
+# ==================================================
+# HEADER & MARKET PULSE (sama)
+# ==================================================
 st.markdown("""
 <h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
 ⚡ IDX TERMINAL v5 — SMART SCANNER
 </h1>
 <p style='text-align:center;color:#445566;font-family:monospace;'>
-Multi-Factor Daily Trade Analyzer · IDX30 / LQ45 / IDX80 / Growth30 / SMC · 400+ Universe · Auto Win/Loss Tracker
+Multi-Factor Daily Trade Analyzer · Day Trade 1 & 3 Hari · Auto Win/Loss Tracker
 </p>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────
-# ★ AUTO-RESOLVE BANNER — jalan saat halaman dibuka ★
-# ─────────────────────────────────────────────────────────
-market_closed, jam_sekarang = is_market_closed()
-
-_resolved, _still_open, _notifs = auto_resolve_open_trades(max_hold_days=3)
-
-# Tampilkan notifikasi hasil resolve
-if _notifs:
+# Auto-resolve setiap load
+notifications = auto_resolve_all_trades()
+if notifications:
     st.markdown("---")
-    st.markdown("### 🔔 Auto Update — Hasil Trade Terbaru")
-    notif_cols = st.columns(min(len(_notifs), 4))
-    for i, n in enumerate(_notifs):
-        col = notif_cols[i % len(notif_cols)]
-        is_win  = n["status"] == "WIN"
-        bg      = "#002a14" if is_win else "#2a0010"
-        border  = "#00ff99" if is_win else "#ff4466"
-        emoji   = "✅" if is_win else "❌"
+    st.markdown("### 🔔 Update Otomatis Trade Hari Ini")
+    cols = st.columns(min(len(notifications), 4))
+    for i, n in enumerate(notifications):
+        col = cols[i % len(cols)]
+        win = n["status"] == "WIN"
+        bg = "#002a14" if win else "#2a0010"
+        border = "#00ff99" if win else "#ff4466"
+        emoji = "✅" if win else "❌"
         pnl_clr = "#00ff99" if n["pnl_pct"] >= 0 else "#ff4466"
-        pnl_val = float(n["exit"]) - float(n["entry"])
         col.markdown(f"""
-        <div style='background:{bg};border:1px solid {border};border-radius:10px;
-                    padding:12px;text-align:center;margin:4px 0;'>
+        <div style='background:{bg};border:1px solid {border};border-radius:10px;padding:10px;text-align:center;margin:4px 0;'>
             <div style='font-size:18px;font-weight:900;color:#00bbff'>{n['ticker']}</div>
-            <div style='font-size:22px;font-weight:900;color:{border}'>{emoji} {n['status']}</div>
-            <div style='color:{pnl_clr};font-size:16px;font-weight:bold'>{n['pnl_pct']:+.2f}%</div>
-            <div style='color:#667;font-size:11px'>Entry: {int(n['entry']):,} → Exit: {int(n['exit']):,}</div>
-            <div style='color:#445;font-size:10px;margin-top:4px'>{n['reason'][:50]}...</div>
+            <div style='font-size:20px;font-weight:900;color:{border}'>{emoji} {n['status']}</div>
+            <div style='color:{pnl_clr};font-size:16px'>{n['pnl_pct']:+.2f}%</div>
+            <div style='color:#667;font-size:11px'>Hold {n.get('days_held',0)} hari</div>
+            <div style='color:#445;font-size:10px'>{n['reason'][:60]}</div>
         </div>
         """, unsafe_allow_html=True)
     st.markdown("---")
-elif _still_open > 0 and not market_closed:
-    st.info(f"⏰ **{_still_open} trade masih OPEN** — Bursa IDX belum tutup ({jam_sekarang}). "
-            f"Hasil WIN/LOSS akan muncul otomatis setelah jam 15:30 WIB.")
-elif _still_open > 0 and market_closed:
-    st.warning(f"🔄 **{_still_open} trade masih OPEN** — Bursa sudah tutup ({jam_sekarang}). "
-               f"Data harga mungkin belum tersedia dari yfinance, akan dicoba ulang saat halaman dibuka kembali.")
 
-st.divider()
-
-# ─────────────────────────────────────────────────────────
-# MARKET PULSE
-# ─────────────────────────────────────────────────────────
+# Market Pulse (sama seperti sebelumnya)
 col_ihsg, col_sector = st.columns([1,1])
 ihsg_df = pd.DataFrame(); ihsg_change=0.0
 
@@ -985,9 +919,9 @@ with col_sector:
 
 st.divider()
 
-# ─────────────────────────────────────────────────────────
-# DEEP ANALYSIS — SINGLE TICKER
-# ─────────────────────────────────────────────────────────
+# ==================================================
+# DEEP ANALYSIS — SINGLE TICKER (sama)
+# ==================================================
 st.subheader("🔬 Deep Analysis — Single Ticker")
 inp1,inp2,inp3 = st.columns([1,2,1])
 with inp1:
@@ -1104,10 +1038,10 @@ if target:
 
 st.divider()
 
-# ─────────────────────────────────────────────────────────
-# SMART SCANNER
-# ─────────────────────────────────────────────────────────
-st.subheader("🎯 Smart Scanner — Pilih Universe Indeks IDX")
+# ==================================================
+# SMART SCANNER — DENGAN PILIHAN HOLD PERIOD
+# ==================================================
+st.subheader("🎯 Smart Scanner — Pilih Universe & Hold Period")
 
 sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
 with sc1:
@@ -1118,6 +1052,10 @@ with sc3:
     min_score = st.slider("Min Score:",0,100,55)
 with sc4:
     top_n = st.number_input("Top N Hasil:",5,50,10)
+
+# --- TAMBAHAN: Hold Period ---
+hold_period = st.radio("⏱️ Hold Period (hari)", options=[1, 3], index=1, horizontal=True, help="1 hari = exit besok, 3 hari = max 3 hari")
+# ------------------------------
 
 is_all_bei = "ALL BEI" in idx_choice
 
@@ -1261,14 +1199,15 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         st.dataframe(styled,use_container_width=True,hide_index=True)
         st.success(f"✅ **{len(df_res)} kandidat** dari {len(tickers_to_scan)} discan | Errors: {errors}")
 
-        # ── AUTO-SAVE ke tracker ──────────────────────────
-        n_saved = save_scan_results_to_log(df_res)
+        # Simpan ke tracker dengan hold_period yang dipilih
+        n_saved = save_scan_results_to_log(df_res, hold_days=hold_period)
         if n_saved > 0:
-            st.info(f"💾 **{n_saved} rekomendasi** otomatis disimpan ke tracker. "
-                    f"Hasil WIN/LOSS akan muncul otomatis setelah jam 15:30 WIB hari ini.")
+            st.info(f"💾 **{n_saved} rekomendasi** disimpan ke tracker dengan hold period {hold_period} hari. "
+                    f"Hasil WIN/LOSS akan muncul otomatis setelah jam 15:30 WIB atau setelah {hold_period} hari.")
         else:
             st.caption("ℹ️ Semua ticker hari ini sudah tercatat di tracker.")
 
+        # Tampilkan rekomendasi dalam bentuk kartu (sama seperti sebelumnya)
         st.markdown("### 📝 Interpretasi Tiap Saham")
         for _, row in df_res.iterrows():
             score_v = row['Score']
@@ -1364,7 +1303,7 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         <b>🌐 IHSG:</b> {ihsg_df['close'].iloc[-1]:,.0f} <span style='color:{"#00ff99" if ihsg_change>0 else "#ff4466"}'>{ihsg_change:+.2f}%</span> — {mktbias}<br><br>
         <b>⚡ Strong Buy:</b> {', '.join(strong_picks) if strong_picks else '—'}<br>
         <b>🔥 Volume Surge:</b> {', '.join(surge_picks) if surge_picks else '—'}<br><br>
-        <b>📌 Panduan Eksekusi:</b>
+        <b>📌 Panduan Eksekusi (Hold {hold_period} hari):</b>
         <ol style='color:#99aacc;margin-top:8px'>
         <li>Prioritaskan saham <b>Score ≥ 70 + Volume Surge 🔥</b> → Setup Premium.</li>
         <li>Jika IHSG {mktbias}, {"hanya masuk setup terkuat (Score ≥ 70)" if "BEARISH" in mktbias else "bisa lebih agresif tapi tetap pakai SL"}.</li>
@@ -1379,21 +1318,16 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
 
 st.divider()
 
-# ─────────────────────────────────────────────────────────
-# WIN/LOSS TRACKER — SECTION
-# ─────────────────────────────────────────────────────────
+# ==================================================
+# WIN/LOSS TRACKER — TAMPILAN DENGAN PROGRESS
+# ==================================================
 st.subheader("📊 Win/Loss Tracker — Rekap Performa Rekomendasi Harian")
 
-# Status auto-resolve
-_ac, _tc = st.columns([3,1])
-with _ac:
-    if market_closed:
-        st.caption(f"🟢 Bursa sudah tutup ({jam_sekarang}) — auto-resolve aktif setiap halaman dibuka.")
-    else:
-        st.caption(f"🟡 Bursa belum tutup ({jam_sekarang}) — hasil akan di-resolve otomatis setelah 15:30 WIB.")
-with _tc:
-    if st.button("🔄 Refresh Tracker", help="Paksa cek ulang semua trade OPEN"):
-        st.rerun()
+market_closed, jam_sekarang = is_market_closed()
+if market_closed:
+    st.caption(f"🟢 Bursa sudah tutup ({jam_sekarang}) — auto-resolve aktif setiap halaman dibuka.")
+else:
+    st.caption(f"🟡 Bursa belum tutup ({jam_sekarang}) — hasil akan di-resolve otomatis setelah 15:30 WIB atau setelah hold period.")
 
 logs = load_trade_log()
 
@@ -1402,7 +1336,7 @@ if not logs:
 else:
     stats = compute_tracker_stats(logs)
 
-    # ── KPI ROW ──────────────────────────────────────────
+    # KPI
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     wr_clr = "#00ff99" if stats['win_rate']>=60 else ("#ffcc00" if stats['win_rate']>=45 else "#ff4466")
     m1.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>WIN RATE</div>"
@@ -1415,64 +1349,93 @@ else:
     m5.metric("📈 Avg P&L/trade", f"{stats['avg_pnl']:+.2f}%")
     m6.metric("💰 Total P&L",     f"{stats['total_pnl']:+.2f}%")
 
-    st.caption(f"🤖 Auto-resolved: **{stats['auto_count']}** trade | Manual: **{stats['manual_count']}** trade | "
-               f"Streak: {stats['streak_type']} ×{stats['streak']}")
+    st.caption(f"📊 Win Rate per Hold Period: 1 Hari = {stats['stats_1d']['wins']}/{stats['stats_1d']['total']} ({stats['stats_1d']['wins']/stats['stats_1d']['total']*100:.1f}%) | "
+               f"3 Hari = {stats['stats_3d']['wins']}/{stats['stats_3d']['total']} ({stats['stats_3d']['wins']/stats['stats_3d']['total']*100:.1f}%)")
 
-    # ── CHARTS ───────────────────────────────────────────
-    ch1, ch2 = st.columns(2)
-    with ch1:
-        bar_df = pd.DataFrame({
-            "Signal":   ["⚡ Strong Buy", "✅ Buy"],
-            "Win Rate": [stats["strong_wr"], stats["buy_wr"]]
-        })
-        fig_wr = go.Figure(go.Bar(
-            x=bar_df["Win Rate"], y=bar_df["Signal"], orientation='h',
-            marker_color=["#00ff99","#44aaff"],
-            text=[f"{v}%" for v in bar_df["Win Rate"]], textposition='auto'
-        ))
-        fig_wr.update_layout(height=180,template='plotly_dark',margin=dict(l=0,r=0,t=30,b=0),
-                              xaxis=dict(range=[0,100]),title_text="Win Rate per Tipe Signal")
-        st.plotly_chart(fig_wr,use_container_width=True)
+    # TAMPILAN REKOMENDASI AKTIF (OPEN)
+    open_trades = [l for l in logs if l["status"] == "OPEN"]
+    if open_trades:
+        st.markdown("### 🔄 Rekomendasi Aktif & Progress")
+        # Urutkan dari yang paling lama
+        open_trades_sorted = sorted(open_trades, key=lambda x: x["date"])
+        for trade in open_trades_sorted:
+            target_date = date.fromisoformat(trade["date"])
+            hold_days = trade.get("hold_days", 3)
+            entry = float(trade["entry"])
+            sl = float(trade["sl"])
+            tp = float(trade["tp"])
+            ticker = trade["ticker"]
 
-    with ch2:
-        if stats['wins']+stats['losses'] > 0:
-            fig_pie = go.Figure(go.Pie(
-                labels=["WIN","LOSS","OPEN"],
-                values=[stats['wins'],stats['losses'],stats['opens']],
-                marker_colors=["#00ff99","#ff4466","#44aaff"],
-                hole=0.45, textinfo='label+percent'
-            ))
-            fig_pie.update_layout(height=180,template='plotly_dark',
-                                  margin=dict(l=0,r=0,t=30,b=0),showlegend=False,
-                                  title_text="Distribusi Hasil Trade")
-            st.plotly_chart(fig_pie,use_container_width=True)
+            # Evaluasi ulang untuk dapatkan progress terbaru
+            status, curr_price, exit_date, action, pnl, days_held, dist_tp, dist_sl = evaluate_trade_progress(
+                ticker, entry, sl, tp, target_date, hold_days
+            )
+            # Jika sudah berubah status, simpan (bisa terjadi jika ada perubahan intraday)
+            if status != "OPEN":
+                trade["status"] = status
+                trade["exit_price"] = curr_price
+                trade["exit_date"] = str(exit_date) if exit_date else None
+                trade["auto_resolved"] = True
+                trade["note"] = action
+                save_trade_log(logs)
+                st.rerun()  # refresh
+                break
 
-    # ── P&L TIMELINE ─────────────────────────────────────
-    closed_logs = sorted(
-        [l for l in logs if l["status"] in ("WIN","LOSS") and l.get("exit_price") and l.get("entry")],
-        key=lambda x: x.get("exit_date") or x["date"]
-    )
-    if len(closed_logs) >= 2:
-        pnl_rows=[]; cum=0.0
-        for l in closed_logs:
-            p=(float(l["exit_price"])-float(l["entry"]))/float(l["entry"])*100
-            cum+=p
-            pnl_rows.append({"Label":f"{l['ticker']} {l.get('exit_date',l['date'])}",
-                              "P&L":round(p,2),"Kumulatif":round(cum,2),
-                              "Auto": "🤖" if l.get("auto_resolved") else "✏️"})
-        df_pnl=pd.DataFrame(pnl_rows)
-        fig_pnl=go.Figure()
-        fig_pnl.add_trace(go.Bar(x=df_pnl["Label"],y=df_pnl["P&L"],
-            marker_color=["#00ff99" if v>=0 else "#ff4466" for v in df_pnl["P&L"]],name="P&L per Trade"))
-        fig_pnl.add_trace(go.Scatter(x=df_pnl["Label"],y=df_pnl["Kumulatif"],
-            mode='lines+markers',line=dict(color='#ffcc00',width=2),name="Kumulatif P&L"))
-        fig_pnl.add_hline(y=0,line_dash="dot",line_color="#445566")
-        fig_pnl.update_layout(height=260,template='plotly_dark',margin=dict(l=0,r=0,t=30,b=0),
-                               title_text="P&L per Trade + Kumulatif (🤖=Auto, ✏️=Manual)",
-                               legend=dict(orientation='h',y=1.1))
-        st.plotly_chart(fig_pnl,use_container_width=True)
+            # Hitung persentase jarak ke TP dan SL
+            if curr_price:
+                dist_to_tp_pct = (tp - curr_price) / tp * 100 if tp > 0 else 0
+                dist_to_sl_pct = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
+                # Progress bar menuju TP
+                progress_to_tp = max(0, min(100, (curr_price - entry) / (tp - entry) * 100 if tp != entry else 0))
+                progress_to_sl = max(0, min(100, (entry - curr_price) / (entry - sl) * 100 if entry != sl else 0))
+            else:
+                dist_to_tp_pct = dist_to_sl_pct = progress_to_tp = progress_to_sl = 0
 
-    # ── HISTORY HARIAN — Kartu Hijau/Merah ───────────────
+            # Warna aksi
+            if "Segera TP" in action:
+                act_color = "#00ff99"
+            elif "Cut loss" in action:
+                act_color = "#ff4466"
+            elif "Menuju TP" in action:
+                act_color = "#88ff88"
+            elif "Mendekati SL" in action:
+                act_color = "#ffaa66"
+            else:
+                act_color = "#ffcc00"
+
+            st.markdown(f"""
+            <div style='background:#0a1020;border:1px solid #1e3050;border-radius:12px;padding:16px;margin:12px 0;'>
+                <div style='display:flex;justify-content:space-between;align-items:center;'>
+                    <div>
+                        <span style='font-size:20px;font-weight:900;color:#00bbff'>{ticker}</span>
+                        <span style='background:#1e3050;border-radius:20px;padding:2px 8px;margin-left:10px;font-size:12px'>Hold {hold_days} hari</span>
+                    </div>
+                    <div style='color:{act_color};font-weight:bold;background:#1e1e3e;padding:4px 12px;border-radius:20px;'>
+                        {action}
+                    </div>
+                </div>
+                <div style='display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;'>
+                    <div><span style='color:#667'>Entry:</span> <b>Rp {entry:,.0f}</b></div>
+                    <div><span style='color:#667'>Current:</span> <b>Rp {curr_price:,.0f}</b></div>
+                    <div><span style='color:#667'>SL:</span> <span style='color:#ff6666'>Rp {sl:,.0f}</span></div>
+                    <div><span style='color:#667'>TP:</span> <span style='color:#66ff99'>Rp {tp:,.0f}</span></div>
+                    <div><span style='color:#667'>Hari ke-:</span> {days_held} / {hold_days}</div>
+                </div>
+                <div style='margin-top:12px;'>
+                    <div class='progress-label'>Progress ke TP ({(curr_price-entry)/(tp-entry)*100:.1f}%)</div>
+                    <div class='progress-bar-container'><div class='progress-bar-fill' style='width:{progress_to_tp}%; background:#00ff99;'></div></div>
+                </div>
+                <div style='margin-top:8px;'>
+                    <div class='progress-label'>Jarak ke SL: {dist_to_sl_pct:.2f}%</div>
+                    <div class='progress-bar-container'><div class='progress-bar-fill' style='width:{min(100, dist_to_sl_pct*10)}%; background:#ff4466;'></div></div>
+                </div>
+                <div style='margin-top:12px;color:#889;font-size:12px;'>
+                    📅 Entry: {trade['date']} | Signal: {trade['signal']} | Score: {trade['score']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # HISTORY HARIAN (sama seperti sebelumnya)
     st.markdown("### 📅 History Harian — Hijau = WIN, Merah = LOSS")
     all_dates = sorted({r['date'] for r in logs}, reverse=True)
 
@@ -1524,12 +1487,12 @@ else:
 
     st.divider()
 
-    # ── UPDATE MANUAL ─────────────────────────────────────
+    # UPDATE MANUAL (sama)
     st.markdown("#### ✏️ Update Hasil Trade Manual")
     open_logs = [l for l in logs if l["status"] == "OPEN"]
     if open_logs:
         options_label = [
-            f"{l['date']} — {l['ticker']} | Entry: {float(l['entry']):,.0f} | SL: {float(l['sl']):,.0f} | TP: {float(l['tp']):,.0f}"
+            f"{l['date']} — {l['ticker']} | Entry: {float(l['entry']):,.0f} | SL: {float(l['sl']):,.0f} | TP: {float(l['tp']):,.0f} | Hold: {l.get('hold_days',3)} hari"
             for l in open_logs
         ]
         sel_idx = st.selectbox(f"Pilih trade open ({len(open_logs)} aktif):",
@@ -1563,13 +1526,14 @@ else:
     else:
         st.success("🎉 Tidak ada trade open saat ini!")
 
-    # ── TAMBAH MANUAL ─────────────────────────────────────
+    # TAMBAH MANUAL (sama)
     with st.expander("➕ Tambah Trade Manual", expanded=False):
         tm1,tm2,tm3=st.columns(3)
         with tm1:
             m_ticker=st.text_input("Kode Saham:",key="m_ticker").upper()
             m_signal=st.selectbox("Signal:",["⚡ STRONG BUY","✅ BUY","🔄 HOLD/WATCH"],key="m_signal")
             m_score=st.number_input("Score:",0,100,60,key="m_score")
+            m_hold=st.selectbox("Hold Period (hari):",[1,3],index=1,key="m_hold")
         with tm2:
             m_entry=st.number_input("Harga Entry (Rp):",min_value=0.0,step=10.0,key="m_entry")
             m_sl=st.number_input("Stop Loss (Rp):",min_value=0.0,step=10.0,key="m_sl")
@@ -1589,6 +1553,7 @@ else:
                     logs.append({"id":trade_id,"date":str(m_date),"ticker":m_ticker,"signal":m_signal,
                                  "score":int(m_score),"entry":float(m_entry),"sl":float(m_sl),
                                  "tp":float(m_tp),"rr":f"1:{rr_m}","pattern":m_pattern or "—",
+                                 "hold_days":m_hold,
                                  "exit_price":None,"exit_date":None,"status":"OPEN",
                                  "auto_resolved":False,"note":m_note})
                     save_trade_log(logs)
@@ -1598,7 +1563,7 @@ else:
 
     st.divider()
 
-    # ── LOG LENGKAP ───────────────────────────────────────
+    # LOG LENGKAP (sama)
     st.markdown("#### 📋 Log Semua Trade")
     f1,f2,f3=st.columns(3)
     with f1: filter_status=st.selectbox("Filter Status:",["Semua","OPEN","WIN","LOSS","MANUAL"],key="fs_log")
@@ -1622,8 +1587,9 @@ else:
     df_log["P&L (%)"] = df_log.apply(calc_pnl_str,axis=1)
     df_log["Resolve"] = df_log.apply(lambda r: "🤖 Auto" if r.get("auto_resolved") else "✏️ Manual", axis=1)
     df_log["Hit"]     = df_log["status"].map({"WIN":"✅ TP Hit","LOSS":"❌ SL Hit","OPEN":"⏳ Open","MANUAL":"📝 Manual"}).fillna("—")
+    df_log["Hold"]    = df_log.get("hold_days", 3)
 
-    show_cols=["date","ticker","signal","score","entry","sl","tp","exit_price","exit_date","P&L (%)","Hit","Resolve","status","note"]
+    show_cols=["date","ticker","signal","score","entry","sl","tp","Hold","exit_price","exit_date","P&L (%)","Hit","Resolve","status","note"]
     exist_cols=[c for c in show_cols if c in df_log.columns]
 
     def style_status(val):
@@ -1635,7 +1601,7 @@ else:
     styled_log=df_log[exist_cols].sort_values("date",ascending=False).style.map(style_status,subset=["status"])
     st.dataframe(styled_log,use_container_width=True,hide_index=True)
 
-    # ── HAPUS + DOWNLOAD ──────────────────────────────────
+    # HAPUS + DOWNLOAD (sama)
     with st.expander("🗑️ Hapus Trade dari Log",expanded=False):
         all_ids=[f"{l['date']} — {l['ticker']} ({l['status']})" for l in logs]
         del_idx=st.selectbox("Pilih trade:",range(len(all_ids)),format_func=lambda i:all_ids[i],key="del_trade_sel")
