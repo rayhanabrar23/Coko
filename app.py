@@ -16,7 +16,7 @@ import pytz
 # ==================================================
 # CONFIG
 # ==================================================
-st.set_page_config(page_title="IDX Terminal v5 - Day Trade Tracker", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="IDX Terminal v5 - Teknikal Entry", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -38,9 +38,6 @@ body, .stApp { background-color: #07090f; color: #d0d8e8; }
     color:#4488ff; padding:2px 10px; border-radius:12px; font-size:12px; margin:2px;
 }
 div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
-.win-card  { background:#002a14; border:1px solid #00ff99; border-radius:8px; padding:10px; text-align:center; }
-.loss-card { background:#2a0010; border:1px solid #ff4466; border-radius:8px; padding:10px; text-align:center; }
-.open-card { background:#001433; border:1px solid #2255aa; border-radius:8px; padding:10px; text-align:center; }
 .progress-label { font-size:12px; color:#aaa; margin-bottom:4px; }
 .progress-bar-container { background:#1e2a3a; border-radius:10px; height:8px; width:100%; margin:5px 0; }
 .progress-bar-fill { background:#00ff99; border-radius:10px; height:8px; width:0%; }
@@ -48,7 +45,7 @@ div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
 """, unsafe_allow_html=True)
 
 # ==================================================
-# UNIVERSE DATABASE (sama seperti sebelumnya)
+# UNIVERSE DATABASE (SAMA)
 # ==================================================
 IDX30 = [
     "AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN",
@@ -179,7 +176,147 @@ def safe_float(val, default=0.0):
     except: return default
 
 # ==================================================
-# ANALYSIS ENGINE (sama)
+# TEKNIKAL LEVELS - ENTRY, SL, TP BERBASIS ANALISIS
+# ==================================================
+def get_swing_low_high(df, lookback=5):
+    """Mendapatkan swing low dan swing high dari lookback terakhir"""
+    if len(df) < lookback:
+        return df['low'].min(), df['high'].max()
+    recent = df.iloc[-lookback:]
+    swing_low = recent['low'].min()
+    swing_high = recent['high'].max()
+    return swing_low, swing_high
+
+def get_pivot_points(df):
+    """Menghitung pivot points harian (Classic) dari candle terakhir"""
+    last = df.iloc[-1]
+    high = safe_float(last['high'])
+    low = safe_float(last['low'])
+    close = safe_float(last['close'])
+    pivot = (high + low + close) / 3
+    r1 = 2*pivot - low
+    r2 = pivot + (high - low)
+    s1 = 2*pivot - high
+    s2 = pivot - (high - low)
+    return pivot, r1, r2, s1, s2
+
+def get_support_resistance(df, n=3):
+    """Mencari level support dan resistansi dari swing high/low dalam n hari"""
+    if len(df) < n:
+        return [], []
+    highs = df['high'].rolling(n, center=True).max().dropna()
+    lows = df['low'].rolling(n, center=True).min().dropna()
+    resistances = sorted(highs.unique(), reverse=True)[:3]
+    supports = sorted(lows.unique())[:3]
+    return resistances, supports
+
+def get_technical_levels(df, score, mode="aggressive"):
+    """
+    Menentukan ENTRY, STOP LOSS, TAKE PROFIT berdasarkan analisis teknikal:
+    - Entry di dekat EMA20 atau support terdekat (mana yang lebih rendah)
+    - SL di bawah swing low terbaru atau support berikutnya
+    - TP berdasarkan resistansi terdekat atau R:R minimal 1:2
+    """
+    if df.empty or len(df) < 20:
+        return None, None, None, None
+
+    # Hitung indikator
+    df = df.copy()
+    df['ema20'] = ta.ema(df['close'], length=20)
+    df['ema50'] = ta.ema(df['close'], length=50)
+    df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
+    bb = ta.bbands(df['close'], length=20, std=2)
+    if bb is not None and not bb.empty:
+        df['bb_l'] = bb.iloc[:,2]
+    else:
+        df['bb_l'] = df['close']
+
+    last = df.iloc[-1]
+    close = safe_float(last['close'])
+    ema20 = safe_float(last['ema20'])
+    atr = safe_float(last['atr'])
+    bb_lower = safe_float(last['bb_l'])
+
+    # Swing low terbaru (5 hari)
+    swing_low, swing_high = get_swing_low_high(df, 5)
+
+    # Pivot points
+    pivot, r1, r2, s1, s2 = get_pivot_points(df)
+
+    # Support/resistance statis
+    resistances, supports = get_support_resistance(df, 10)
+
+    # --- ENTRY AREA ---
+    # Idealnya entry di dekat EMA20 jika harga di atasnya, atau di support terdekat jika harga di bawah EMA20
+    if close > ema20:
+        # Uptrend: entry di area pullback ke EMA20 atau lower BB
+        entry_candidate = max(ema20, bb_lower)  # ambil yang lebih tinggi agar tidak terlalu rendah
+        entry = min(close, entry_candidate * 1.01)  # jangan lebih tinggi dari close
+    else:
+        # Harga di bawah EMA20: cari support
+        support_candidates = [s for s in supports if s < close] + [s1, s2, bb_lower]
+        valid_supports = [s for s in support_candidates if s > 0 and s < close]
+        if valid_supports:
+            entry = max(valid_supports)  # support terdekat di bawah harga
+        else:
+            entry = close * 0.98  # default 2% di bawah close
+
+    entry = max(entry, close * 0.97)  # batasi maksimal diskon 3%
+    entry = round(entry, 0)
+
+    # --- STOP LOSS ---
+    # SL di bawah swing low terbaru atau support berikutnya
+    sl_candidates = [swing_low * 0.99, s1 * 0.99, s2 * 0.99, bb_lower * 0.98]
+    sl_candidates = [s for s in sl_candidates if s > 0 and s < entry]
+    if sl_candidates:
+        sl = max(sl_candidates)  # ambil yang tertinggi (paling dekat)
+    else:
+        sl = entry - max(atr * 1.2, entry * 0.015)  # minimal 1.5% dari entry
+
+    sl = max(sl, entry * 0.95)  # maksimal loss 5%
+    sl = round(sl, 0)
+
+    # --- TAKE PROFIT ---
+    # TP di resistansi terdekat atau berdasarkan R:R minimal 1:2
+    risk = entry - sl
+    if risk <= 0:
+        risk = entry * 0.01
+
+    # Cari resistansi terdekat di atas entry
+    res_candidates = [r for r in resistances if r > entry] + [r1, r2, swing_high]
+    valid_res = [r for r in res_candidates if r > entry]
+    if valid_res:
+        tp = min(valid_res)  # resistansi terdekat
+    else:
+        tp = entry + max(risk * 2, entry * 0.03)  # minimal R:R 1:2 atau 3%
+
+    # Pastikan TP minimal 2x risk
+    if (tp - entry) < (risk * 1.5):
+        tp = entry + risk * 2
+
+    tp = round(tp, 0)
+
+    # Hitung ulang R:R
+    rr = round((tp - entry) / (entry - sl), 2) if (entry - sl) > 0 else 0
+
+    # Signal berdasarkan score dan posisi teknikal
+    if score >= 70 and close > ema20:
+        signal = "⚡ STRONG BUY"
+        sig_color = "#00ff99"
+    elif score >= 55 and close > ema20:
+        signal = "✅ BUY"
+        sig_color = "#44dd88"
+    elif score < 40 or close < ema20 * 0.98:
+        signal = "❌ SELL/AVOID"
+        sig_color = "#ff4466"
+    else:
+        signal = "🔄 HOLD/WATCH"
+        sig_color = "#ffcc00"
+
+    return entry, sl, tp, rr, signal, sig_color
+
+# ==================================================
+# FUNGSI LAIN (detect_patterns, volume_analysis, score_ticker) SAMA
 # ==================================================
 def detect_patterns(df):
     if len(df) < 3: return ["—"]
@@ -264,24 +401,9 @@ def score_ticker(df, mode="aggressive"):
     detail={'Trend':ts,'Momentum':ms,'Volume':vs,'BB Zone':bs,'Pattern':ps}
     return score, detail
 
-def get_signal(df, score, mode="aggressive"):
-    l=df.iloc[-1]
-    cl=safe_float(l['close']); e20=safe_float(l['ema20'] if 'ema20' in df.columns else l['close'])
-    e50=safe_float(l['ema50'] if 'ema50' in df.columns else l['close'])
-    rsi=safe_float(l['rsi'] if 'rsi' in df.columns else 50)
-    macd=safe_float(l['macd'] if 'macd' in df.columns else 0)
-    sig=safe_float(l['sig'] if 'sig' in df.columns else 0)
-    atr=safe_float(l['atr'] if 'atr' in df.columns else cl*0.02)
-
-    sl=cl-(1.5*atr); tp=cl+(2.5*atr)
-    rr=round((tp-cl)/(cl-sl),2) if (cl-sl)>0 else 0
-
-    if score>=70 and cl>e20 and rsi<65 and macd>sig:   return "⚡ STRONG BUY","#00ff99",sl,tp,rr
-    elif score>=55 and cl>e20 and rsi<70:               return "✅ BUY","#44dd88",sl,tp,rr
-    elif rsi>75 or (cl<e50 and cl<e20 and score<35):   return "❌ SELL/AVOID","#ff4466",sl,tp,rr
-    elif score<40:                                      return "⚠️ WEAK/SKIP","#ff8844",sl,tp,rr
-    else:                                               return "🔄 HOLD/WATCH","#ffcc00",sl,tp,rr
-
+# ==================================================
+# FUNGSI ANALISIS FULL (dengan technical levels)
+# ==================================================
 @st.cache_data(ttl=3600, show_spinner=False)
 def analyze_full_cached(ticker, period="6mo"):
     return _analyze_full_core(ticker, period)
@@ -355,7 +477,11 @@ def _scan_one(args):
         if sc_val < min_score:
             return None, ticker_name, "Score", f"Score={sc_val} < min {min_score}"
 
-        sig, _, sl_v, tp_v, rr_v = get_signal(d, sc_val)
+        # Gunakan fungsi teknikal untuk entry, SL, TP, signal
+        entry, sl, tp, rr, sig, _ = get_technical_levels(d, sc_val)
+        if entry is None:
+            return None, ticker_name, "Teknikal", "Gagal hitung level"
+
         if "SELL" in sig or "WEAK" in sig:
             return None, ticker_name, "Signal", f"Signal={sig}"
         if signal_filter == "Strong BUY Only" and "STRONG" not in sig:
@@ -377,14 +503,14 @@ def _scan_one(args):
             "Ticker":    ticker_name,
             "Score":     sc_val,
             "Signal":    sig,
-            "Price":     int(cl_q),
+            "Price":     int(entry),   # ENTRY TEKNIKAL
             "RSI":       round(rsi_q, 1),
             "Vol":       vlbl,
             "MACD":      "✅" if macd_v > sig_v2 else "❌",
             "EMA20":     "✅" if cl_q >= ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-            "SL":        int(sl_v),
-            "TP":        int(tp_v),
-            "R:R":       f"1:{rr_v}",
+            "SL":        int(sl),
+            "TP":        int(tp),
+            "R:R":       f"1:{rr}",
             "Pattern":   pats[0] if pats else "—",
             "Trend_s":   sc_det.get('Trend', 0),
             "Mom_s":     sc_det.get('Momentum', 0),
@@ -442,7 +568,7 @@ def calc_sr(df):
     return list(res), list(sup)
 
 # ==================================================
-# INTERPRETASI ENGINE (sama)
+# INTERPRETASI (sama, tapi disesuaikan)
 # ==================================================
 def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, vsurge_light, vsurge_strong, ihsg_change=0.0):
     l = df.iloc[-1]
@@ -452,193 +578,71 @@ def interpret_analysis(ticker, score, detail, signal, df, sl, tp, rr, pats, vr, 
     e50  = safe_float(l['ema50'] if 'ema50' in df.columns else cl)
     macd = safe_float(l['macd']  if 'macd'  in df.columns else 0)
     sig  = safe_float(l['sig']   if 'sig'   in df.columns else 0)
-    atr  = safe_float(l['atr']   if 'atr'   in df.columns else cl * 0.02)
     name = ticker.replace(".JK","")
 
     pros = []; cons = []; cautions = []
 
     gap_pct = (cl - e20) / e20 * 100 if e20 else 0
     if cl > e20 and cl > e50:
-        pros.append(f"Harga berada di atas EMA20 ({e20:,.0f}) dan EMA50 ({e50:,.0f}), tren naik jangka pendek dan menengah masih kuat.")
+        pros.append(f"Harga di atas EMA20 & EMA50, uptrend kuat.")
     elif cl > e20 and cl <= e50:
-        cautions.append(f"Harga sudah di atas EMA20 ({gap_pct:+.1f}%), tapi masih di bawah EMA50 — tren menengah belum recovery penuh.")
-    elif -1.5 <= gap_pct < 0:
-        cautions.append(f"Harga sedikit di bawah EMA20 ({gap_pct:.1f}%) — masih dalam toleransi untuk setup breakout.")
+        cautions.append(f"Harga di atas EMA20 ({gap_pct:+.1f}%) tapi masih di bawah EMA50.")
     else:
-        cons.append(f"Harga ({cl:,.0f}) masih di bawah EMA20 ({e20:,.0f}) dan EMA50 ({e50:,.0f}). Tren masih negatif.")
-
-    if -0.5 <= gap_pct <= 3:
-        pros.append(f"Posisi harga {gap_pct:+.1f}% dari EMA20 — zona entry ideal sebelum breakout terjadi.")
-    elif 3 < gap_pct <= 6:
-        cautions.append(f"Harga sudah {gap_pct:.1f}% di atas EMA20. Masih acceptable tapi sizing lebih kecil.")
-    elif gap_pct > 6:
-        cautions.append(f"Harga {gap_pct:.1f}% di atas EMA20 — risiko koreksi ke EMA20 meningkat.")
+        cons.append(f"Harga ({cl:,.0f}) di bawah EMA20 ({e20:,.0f}), tren negatif.")
 
     if 55 <= rsi <= 72:
-        pros.append(f"RSI {rsi:.1f} berada di zona momentum prime (55–72). Sweet spot untuk daily trade breakout.")
+        pros.append(f"RSI {rsi:.1f} di zona momentum prime (55–72).")
     elif 40 <= rsi < 55:
-        pros.append(f"RSI {rsi:.1f} di zona akumulasi — saham sedang istirahat dan siap kembali naik.")
+        pros.append(f"RSI {rsi:.1f} zona akumulasi.")
     elif rsi < 35:
-        pros.append(f"RSI {rsi:.1f} oversold ekstrem — peluang rebound teknikal sangat tinggi.")
-    elif 72 < rsi <= 78:
-        cautions.append(f"RSI {rsi:.1f} mulai panas. Kurangi sizing dan perketat SL.")
+        pros.append(f"RSI {rsi:.1f} oversold ekstrem — potensi rebound.")
     elif rsi > 78:
-        cons.append(f"RSI {rsi:.1f} overbought berlebihan (>78). Hindari entry baru.")
+        cons.append(f"RSI {rsi:.1f} overbought (>78). Hindari entry baru.")
 
     if macd > sig:
-        hist_val = safe_float(l['hist'] if 'hist' in df.columns else 0)
-        prev_hist = safe_float(df['hist'].iloc[-2] if 'hist' in df.columns and len(df)>1 else 0)
-        if hist_val > prev_hist:
-            pros.append(f"MACD golden cross dan histogram terus membesar — momentum beli semakin akseleratif.")
-        else:
-            pros.append(f"MACD di atas signal line (bullish) — tekanan beli masih dominan.")
+        pros.append("MACD bullish cross.")
     else:
-        cons.append(f"MACD masih di bawah signal line. Tunggu golden cross untuk konfirmasi entry.")
+        cons.append("MACD masih di bawah signal line.")
 
     if vsurge_strong:
-        pros.append(f"Volume {vr:.1f}x rata-rata 20 hari — surge kuat 🔥🔥. Konfirmasi institusional.")
+        pros.append(f"Volume surge kuat ({vr:.1f}x).")
     elif vsurge_light:
-        pros.append(f"Volume {vr:.1f}x rata-rata — surge ringan 🔥. Minat beli mulai masuk.")
-    elif vr >= 1.0:
-        cautions.append(f"Volume di rata-rata ({vr:.1f}x). Pergerakan belum dikonfirmasi volume besar.")
+        pros.append(f"Volume surge ({vr:.1f}x).")
     else:
-        cautions.append(f"Volume sepi ({vr:.1f}x rata-rata). Rentan reversal tiba-tiba.")
-
-    if 'bb_l' in df.columns and 'bb_m' in df.columns:
-        bb_l = safe_float(l['bb_l']); bb_m = safe_float(l['bb_m']); bb_u = safe_float(l['bb_u'])
-        if cl <= bb_l * 1.01:
-            pros.append(f"Harga menyentuh lower BB ({bb_l:,.0f}) — zona oversold BB, sering berbalik ke midband ({bb_m:,.0f}).")
-        elif cl <= bb_m:
-            pros.append(f"Harga antara lower BB dan midband — zona akumulasi yang bagus untuk entry.")
-        elif cl > bb_m and cl < bb_u * 0.97:
-            bb_width = (bb_u - bb_l) / bb_m if bb_m > 0 else 0
-            if bb_width > 0.04:
-                pros.append(f"Harga di upper half BB dan bandwidth masih melebar — tanda momentum breakout yang sehat.")
-            else:
-                cautions.append(f"Harga di atas midband BB tapi bandwidth mulai menyempit — momentum bisa melambat.")
-        elif cl >= bb_u * 0.97:
-            cons.append(f"Harga mendekati upper BB ({bb_u:,.0f}). Set SL ketat.")
-
-    pat_str = pats[0] if pats else "—"
-    if any(k in pat_str for k in ['Engulfing','Morning Star','Hammer','Marubozu']):
-        pros.append(f"Pola candlestick bullish terdeteksi — konfirmasi visual pembalikan atau lanjutan naik.")
-    elif any(k in pat_str for k in ['Bearish','Evening Star']):
-        cons.append(f"Pola bearish terdeteksi — waspada tekanan jual meningkat.")
-    elif 'Doji' in pat_str:
-        cautions.append(f"Pola Doji — pasar ragu-ragu. Tunggu candle konfirmasi sebelum masuk.")
-
-    if ihsg_change > 0.5:
-        pros.append(f"IHSG momentum positif ({ihsg_change:+.2f}%) — tailwind dari market secara keseluruhan.")
-    elif ihsg_change < -0.5:
-        cautions.append(f"IHSG sedang melemah ({ihsg_change:+.2f}%). Setup bagus bisa ikut tertekan.")
+        cautions.append(f"Volume sepi ({vr:.1f}x).")
 
     if rr >= 2.0:
-        pros.append(f"Risk:Reward 1:{rr} — secara matematis menguntungkan.")
-    elif 1.5 <= rr < 2.0:
-        cautions.append(f"R:R 1:{rr} — di batas minimum. Masih acceptable.")
-    else:
-        cautions.append(f"R:R hanya 1:{rr} — terlalu kecil. Cari entry yang lebih baik.")
+        pros.append(f"Risk:Reward 1:{rr} — menguntungkan.")
+    elif rr < 1.5:
+        cons.append(f"R:R hanya 1:{rr} — terlalu kecil.")
 
     score_cons = len(cons)
-    if "STRONG BUY" in signal or ("BUY" in signal and score_cons == 0 and len(pros) >= 4):
-        verdict_title = f"✅ LAYAK DIBELI — Setup {name} Tergolong Kuat"
-        verdict_color = "#00ff99"; confidence = "TINGGI"; conf_color = "#00ff99"
-        verdict_open = f"Skor {score}/100 — saham <b>{name}</b> di Rp {cl:,.0f} menunjukkan setup beli yang kuat untuk daily trade."
+    if "STRONG BUY" in signal and score_cons == 0:
+        verdict_title = f"✅ LAYAK DIBELI — Setup {name} Kuat"
+        verdict_color = "#00ff99"; confidence = "TINGGI"
     elif "BUY" in signal and score_cons <= 1:
-        verdict_title = f"🟡 BOLEH DIPERTIMBANGKAN — Setup {name} Cukup Layak"
-        verdict_color = "#ffcc00"; confidence = "SEDANG"; conf_color = "#ffcc00"
-        verdict_open = f"Skor {score}/100 — <b>{name}</b> di Rp {cl:,.0f} punya setup yang layak dengan beberapa catatan."
-    elif "SELL" in signal or "WEAK" in signal or score_cons >= 3:
-        verdict_title = f"❌ TIDAK DISARANKAN — {name} Belum Siap"
-        verdict_color = "#ff4466"; confidence = "RENDAH"; conf_color = "#ff4466"
-        verdict_open = f"Skor {score}/100 — <b>{name}</b> di Rp {cl:,.0f} belum memiliki setup yang aman saat ini."
+        verdict_title = f"🟡 BOLEH DIPERTIMBANGKAN — {name}"
+        verdict_color = "#ffcc00"; confidence = "SEDANG"
     else:
-        verdict_title = f"⏳ TUNGGU KONFIRMASI — {name} Transisi"
-        verdict_color = "#aaaaff"; confidence = "MENUNGGU"; conf_color = "#aaaaff"
-        verdict_open = f"Skor {score}/100 — {name} sedang transisi. Campuran sinyal positif dan negatif."
+        verdict_title = f"❌ TIDAK DISARANKAN — {name}"
+        verdict_color = "#ff4466"; confidence = "RENDAH"
 
-    if "BUY" in signal and "WEAK" not in signal:
-        closing = (f"<b>Kesimpulan:</b> Entry area Rp {cl:,.0f}–{cl*1.005:,.0f}, "
-                   f"SL Rp {sl:,.0f} (−{((cl-sl)/cl*100):.1f}%), "
-                   f"TP Rp {tp:,.0f} (+{((tp-cl)/cl*100):.1f}%). Hold 1–3 hari trading.")
-    else:
-        closing = (f"<b>Alternatif:</b> Masukkan {name} ke watchlist. Tunggu RSI di 40–65 dan MACD golden cross sebelum entry.")
-
-    pros_html = "".join([f"<li style='margin-bottom:6px;color:#b0ffcc'>✅ {p}</li>" for p in pros])
-    cons_html = "".join([f"<li style='margin-bottom:6px;color:#ffaaaa'>❌ {c}</li>" for c in cons])
-    caut_html = "".join([f"<li style='margin-bottom:6px;color:#ffeebb'>⚠️ {w}</li>" for w in cautions])
-
-    support_section = ""
-    if pros_html:
-        support_section += f"<p style='color:#668;font-size:12px;margin:8px 0 4px'>FAKTOR PENDUKUNG:</p><ul style='margin:0;padding-left:20px'>{pros_html}</ul>"
-    if cons_html:
-        support_section += f"<p style='color:#668;font-size:12px;margin:10px 0 4px'>FAKTOR PENGHAMBAT:</p><ul style='margin:0;padding-left:20px'>{cons_html}</ul>"
-    if caut_html:
-        support_section += f"<p style='color:#668;font-size:12px;margin:10px 0 4px'>CATATAN KEHATI-HATIAN:</p><ul style='margin:0;padding-left:20px'>{caut_html}</ul>"
+    pros_html = "".join([f"<li>✅ {p}</li>" for p in pros])
+    cons_html = "".join([f"<li>❌ {c}</li>" for c in cons])
+    caut_html = "".join([f"<li>⚠️ {w}</li>" for w in cautions])
 
     html = f"""
-    <div style='background:linear-gradient(135deg,#080e1a,#0c1525);border:2px solid {verdict_color}44;
-                border-left:4px solid {verdict_color};border-radius:12px;padding:20px;margin:16px 0;'>
-        <div style='font-size:18px;font-weight:bold;color:{verdict_color};margin-bottom:10px'>
-            {verdict_title}
-            &nbsp;<span style='font-size:12px;background:{conf_color}22;color:{conf_color};
-                          padding:2px 10px;border-radius:10px;border:1px solid {conf_color}44'>
-                KEYAKINAN: {confidence}
-            </span>
-        </div>
-        <p style='color:#ccd;line-height:1.7;margin:0 0 14px'>{verdict_open}</p>
-        {support_section}
-        <div style='margin-top:14px;padding:12px;background:#ffffff08;border-radius:8px;
-                    color:#dde;line-height:1.7;font-size:14px;border-left:3px solid {verdict_color}88'>
-            {closing}
-        </div>
-        <p style='color:#445;font-size:11px;margin-top:10px;margin-bottom:0'>
-            ⚠️ Analisis teknikal saja — bukan saran investasi.
-        </p>
+    <div style='background:#0a1020;border-left:4px solid {verdict_color};border-radius:12px;padding:16px;margin:12px 0;'>
+        <div style='font-size:18px;font-weight:bold;color:{verdict_color}'>{verdict_title}</div>
+        <p>{verdict_open}</p>
+        <ul>{pros_html}{cons_html}{cautions_html}</ul>
+        <p><b>Kesimpulan:</b> Entry di {entry}, SL {sl}, TP {tp}, R:R 1:{rr}.</p>
     </div>
     """
-    return html, confidence, conf_color
-
-def interpret_scanner_row(row, ihsg_change=0.0):
-    name    = row['Ticker']
-    score   = row['Score']
-    signal  = row['Signal']
-    rsi     = row['RSI']
-    vsurge  = "🔥" in str(row.get('Vol',''))
-    macd_ok = row['MACD'] == "✅"
-    ema_ok  = row['EMA20'] == "✅"
-
-    reasons  = []
-    warnings = []
-
-    if score >= 70:      reasons.append(f"skor tinggi ({score}/100)")
-    if vsurge:           reasons.append("volume surge 🔥")
-    if macd_ok:          reasons.append("MACD bullish")
-    if ema_ok:           reasons.append("di atas EMA20")
-    if 55 <= rsi <= 72:  reasons.append(f"RSI momentum prime ({rsi})")
-    elif 40 <= rsi < 55: reasons.append(f"RSI akumulasi ({rsi})")
-    elif rsi < 35:       reasons.append(f"RSI oversold ({rsi}) — potensi rebound")
-
-    if not ema_ok:       warnings.append("harga di bawah EMA20")
-    if not macd_ok:      warnings.append("MACD masih bearish")
-    if rsi > 75:         warnings.append(f"RSI panas ({rsi})")
-    if not vsurge:       warnings.append("volume belum surge")
-    if ihsg_change < -0.5: warnings.append("IHSG melemah")
-
-    if "STRONG" in signal and not warnings:
-        verdict = f"🟢 <b>BUY SEKARANG</b> — {', '.join(reasons[:3])}. Setup premium."
-    elif "BUY" in signal and len(warnings) <= 1:
-        w_note = f" Perhatikan: {warnings[0]}." if warnings else ""
-        verdict = f"🟡 <b>BUY sizing kecil</b> — {', '.join(reasons[:2])}.{w_note}"
-    elif warnings:
-        verdict = f"⏳ <b>Tunggu konfirmasi</b> — {', '.join(warnings[:2])}. Masuk setelah reversal konfirmasi."
-    else:
-        verdict = f"👀 <b>Watchlist</b> — Setup sedang terbentuk."
-
-    return verdict
+    return html, confidence, verdict_color
 
 # ==================================================
-# WIN/LOSS TRACKER — REVISI UNTUK DAY TRADE 1 & 3 HARI
+# WIN/LOSS TRACKER (sama seperti sebelumnya, tanpa perubahan besar)
 # ==================================================
 TRACKER_FILE = Path("idx_trade_log.json")
 TZ_JKT = pytz.timezone("Asia/Jakarta")
@@ -654,7 +658,6 @@ def save_trade_log(logs: list):
         json.dump(logs, f, indent=2, default=str)
 
 def save_scan_results_to_log(df_results: pd.DataFrame, hold_days: int, scan_date: str = None):
-    """Simpan rekomendasi dari scanner ke log dengan hold_days (1 atau 3)"""
     if scan_date is None:
         scan_date = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
     logs = load_trade_log()
@@ -675,7 +678,7 @@ def save_scan_results_to_log(df_results: pd.DataFrame, hold_days: int, scan_date
             "tp":         float(row["TP"]),
             "rr":         str(row["R:R"]),
             "pattern":    row.get("Pattern", "—"),
-            "hold_days":  hold_days,           # 1 atau 3
+            "hold_days":  hold_days,
             "exit_price": None,
             "exit_date":  None,
             "status":     "OPEN",
@@ -693,17 +696,12 @@ def is_market_closed() -> tuple[bool, str]:
     return closed, label
 
 def get_price_progress(ticker_jk, entry, sl, tp, target_date):
-    """
-    Ambil data harga dari target_date sampai sekarang.
-    Return (current_price, highest, lowest, last_close, df_slice)
-    """
     try:
         end = datetime.now(TZ_JKT).date()
         start = target_date - timedelta(days=1)
         hist = clean_df(yf.download(ticker_jk, start=start, end=end + timedelta(days=1), progress=False))
         if hist.empty:
             return None, None, None, None, None
-        # filter mulai dari target_date
         hist_from = hist[hist.index.date >= target_date]
         if hist_from.empty:
             return None, None, None, None, None
@@ -716,11 +714,6 @@ def get_price_progress(ticker_jk, entry, sl, tp, target_date):
         return None, None, None, None, None
 
 def evaluate_trade_progress(ticker, entry, sl, tp, target_date, hold_days):
-    """
-    Evaluasi status trade:
-    - Jika sudah TP atau SL → return (status, exit_price, exit_date, reason, pnl_pct, days_held, dist_tp, dist_sl)
-    - Jika belum, hitung jarak ke TP/SL dan saran aksi
-    """
     ticker_jk = ticker + ".JK"
     curr_price, highest, lowest, last_close, hist = get_price_progress(ticker_jk, entry, sl, tp, target_date)
     if curr_price is None:
@@ -729,56 +722,46 @@ def evaluate_trade_progress(ticker, entry, sl, tp, target_date, hold_days):
     today = datetime.now(TZ_JKT).date()
     days_held = (today - target_date).days
 
-    # Cek apakah sudah kena TP atau SL (intraday)
     if highest >= tp:
-        return "WIN", tp, target_date + timedelta(days=1), f"TP tercapai (high {highest:,.0f} >= {tp:,.0f})", (tp - entry)/entry*100, days_held, 0, 0
+        return "WIN", tp, target_date + timedelta(days=1), f"TP tercapai", (tp - entry)/entry*100, days_held, 0, 0
     if lowest <= sl:
-        return "LOSS", sl, target_date + timedelta(days=1), f"SL tersentuh (low {lowest:,.0f} <= {sl:,.0f})", (sl - entry)/entry*100, days_held, 0, 0
+        return "LOSS", sl, target_date + timedelta(days=1), f"SL tersentuh", (sl - entry)/entry*100, days_held, 0, 0
 
-    # Jika sudah melebihi hold_days, force close di harga terakhir
     if days_held >= hold_days:
         pnl = (last_close - entry)/entry*100
-        return ("WIN" if pnl >= 0 else "LOSS"), last_close, today, f"Force close setelah {hold_days} hari (close {last_close:,.0f})", pnl, days_held, 0, 0
+        return ("WIN" if pnl >= 0 else "LOSS"), last_close, today, f"Force close {hold_days} hari", pnl, days_held, 0, 0
 
-    # Masih open: hitung jarak ke TP dan SL
     dist_to_tp = (tp - curr_price) / tp * 100 if tp > 0 else 0
     dist_to_sl = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
-    # Saran aksi
     if dist_to_tp <= 1.5:
         action = "🚀 Segera TP"
     elif dist_to_sl <= 1.5:
-        action = "⚠️ Cut loss / ketatkan SL"
+        action = "⚠️ Cut loss"
     elif dist_to_tp <= 3:
-        action = "📈 Menuju TP, hold"
+        action = "📈 Menuju TP"
     elif dist_to_sl <= 3:
-        action = "📉 Mendekati SL, waspada"
+        action = "📉 Mendekati SL"
     else:
-        action = "🟡 Hold sesuai rencana"
+        action = "🟡 Hold"
 
     return "OPEN", curr_price, None, action, 0, days_held, dist_to_tp, dist_to_sl
 
 def auto_resolve_all_trades():
-    """Panggil setiap halaman dimuat untuk update semua trade OPEN"""
-    market_closed, jam = is_market_closed()
     logs = load_trade_log()
     updated = False
     notifs = []
-
     for trade in logs:
         if trade["status"] != "OPEN":
             continue
-
         target_date = date.fromisoformat(trade["date"])
-        hold_days = trade.get("hold_days", 3)  # default 3
+        hold_days = trade.get("hold_days", 3)
         ticker = trade["ticker"]
         entry = float(trade["entry"])
         sl = float(trade["sl"])
         tp = float(trade["tp"])
-
-        status, exit_price, exit_date, reason, pnl, days_held, dist_tp, dist_sl = evaluate_trade_progress(
+        status, exit_price, exit_date, reason, pnl, days_held, _, _ = evaluate_trade_progress(
             ticker, entry, sl, tp, target_date, hold_days
         )
-
         if status != "OPEN":
             trade["status"] = status
             trade["exit_price"] = exit_price
@@ -794,9 +777,7 @@ def auto_resolve_all_trades():
                 "exit": exit_price,
                 "reason": reason,
                 "days_held": days_held,
-                "scan_date": trade["date"],
             })
-
     if updated:
         save_trade_log(logs)
     return notifs
@@ -816,7 +797,6 @@ def compute_tracker_stats(logs: list) -> dict:
     avg_pnl   = round(sum(pnl_list) / len(pnl_list), 2) if pnl_list else 0
     total_pnl = round(sum(pnl_list), 2) if pnl_list else 0
 
-    # Statistik per hold_days
     stats_1d = {"wins":0, "losses":0, "total":0}
     stats_3d = {"wins":0, "losses":0, "total":0}
     for l in closed:
@@ -842,18 +822,17 @@ def compute_tracker_stats(logs: list) -> dict:
 # ==================================================
 st.markdown("""
 <h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
-⚡ IDX TERMINAL v5 — SMART SCANNER
+⚡ IDX TERMINAL v5 — TEKNIKAL ENTRY
 </h1>
 <p style='text-align:center;color:#445566;font-family:monospace;'>
-Multi-Factor Daily Trade Analyzer · Day Trade 1 & 3 Hari · Auto Win/Loss Tracker
+Entry di Support/EMA20 · SL di Swing Low · TP di Resistansi · R:R ≥ 1:2
 </p>
 """, unsafe_allow_html=True)
 
-# Auto-resolve setiap load
 notifications = auto_resolve_all_trades()
 if notifications:
     st.markdown("---")
-    st.markdown("### 🔔 Update Otomatis Trade Hari Ini")
+    st.markdown("### 🔔 Update Otomatis Trade")
     cols = st.columns(min(len(notifications), 4))
     for i, n in enumerate(notifications):
         col = cols[i % len(cols)]
@@ -863,20 +842,17 @@ if notifications:
         emoji = "✅" if win else "❌"
         pnl_clr = "#00ff99" if n["pnl_pct"] >= 0 else "#ff4466"
         col.markdown(f"""
-        <div style='background:{bg};border:1px solid {border};border-radius:10px;padding:10px;text-align:center;margin:4px 0;'>
+        <div style='background:{bg};border:1px solid {border};border-radius:10px;padding:10px;text-align:center;'>
             <div style='font-size:18px;font-weight:900;color:#00bbff'>{n['ticker']}</div>
             <div style='font-size:20px;font-weight:900;color:{border}'>{emoji} {n['status']}</div>
-            <div style='color:{pnl_clr};font-size:16px'>{n['pnl_pct']:+.2f}%</div>
-            <div style='color:#667;font-size:11px'>Hold {n.get('days_held',0)} hari</div>
-            <div style='color:#445;font-size:10px'>{n['reason'][:60]}</div>
+            <div style='color:{pnl_clr}'>{n['pnl_pct']:+.2f}%</div>
+            <div style='color:#445;font-size:10px'>{n['reason'][:40]}</div>
         </div>
         """, unsafe_allow_html=True)
     st.markdown("---")
 
-# Market Pulse
 col_ihsg, col_sector = st.columns([1,1])
 ihsg_df = pd.DataFrame(); ihsg_change=0.0
-
 with col_ihsg:
     st.subheader("📈 IHSG Market Pulse")
     raw = yf.download("^JKSE",period="1y",progress=False); ihsg_df=clean_df(raw)
@@ -884,12 +860,9 @@ with col_ihsg:
         ihsg_change=((ihsg_df['close'].iloc[-1]-ihsg_df['close'].iloc[-2])/ihsg_df['close'].iloc[-2])*100
         ihsg_df['ma20']=ihsg_df['close'].rolling(20).mean()
         fig=go.Figure()
-        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['close'],fill='tozeroy',
-                                 line_color='#00bbff',fillcolor='rgba(0,187,255,0.07)',name='IHSG'))
-        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['ma20'],
-                                 line=dict(color='orange',width=1.5,dash='dot'),name='MA20'))
-        fig.update_layout(height=230,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),
-                          showlegend=False,xaxis_rangeslider_visible=False)
+        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['close'],fill='tozeroy',line_color='#00bbff'))
+        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['ma20'],line=dict(color='orange',width=1.5,dash='dot')))
+        fig.update_layout(height=230,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),showlegend=False)
         st.plotly_chart(fig,use_container_width=True)
         ca,cb,cc,cd=st.columns(4)
         ca.metric("Last",f"{ihsg_df['close'].iloc[-1]:,.0f}")
@@ -909,8 +882,7 @@ with col_sector:
         except: continue
     if sec_data:
         df_s=pd.DataFrame(sec_data)
-        fig=px.treemap(df_s,path=['Parent','Sektor'],values='Size',color='Perf',
-                       color_continuous_scale='RdYlGn',range_color=[-3,3])
+        fig=px.treemap(df_s,path=['Parent','Sektor'],values='Size',color='Perf',color_continuous_scale='RdYlGn',range_color=[-3,3])
         fig.update_layout(height=230,margin=dict(l=0,r=0,t=0,b=0),template='plotly_dark')
         st.plotly_chart(fig,use_container_width=True)
         best=max(sec_data,key=lambda x:x['Perf']); worst=min(sec_data,key=lambda x:x['Perf'])
@@ -920,7 +892,7 @@ with col_sector:
 st.divider()
 
 # ==================================================
-# DEEP ANALYSIS — SINGLE TICKER
+# DEEP ANALYSIS — SINGLE TICKER (dengan teknikal entry)
 # ==================================================
 st.subheader("🔬 Deep Analysis — Single Ticker")
 inp1,inp2,inp3 = st.columns([1,2,1])
@@ -943,119 +915,113 @@ if target:
         df=analyze_full(target, period=tf)
     if df is not None:
         score,detail=score_ticker(df)
-        signal,sig_color,sl,tp,rr=get_signal(df, score)
-        l=df.iloc[-1]
-        pats=detect_patterns(df)
-        vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
-        res,sup=calc_sr(df)
-        cl=safe_float(l['close']); rsi=safe_float(l['rsi'])
-        e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
-        atr=safe_float(l['atr']); macd=safe_float(l['macd']); sig_v=safe_float(l['sig'])
+        entry, sl, tp, rr, signal, _ = get_technical_levels(df, score)
+        if entry is None:
+            st.warning("Gagal hitung level teknikal.")
+        else:
+            l=df.iloc[-1]
+            pats=detect_patterns(df)
+            vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
+            res,sup=calc_sr(df)
+            cl=safe_float(l['close']); rsi=safe_float(l['rsi'])
+            e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
+            atr=safe_float(l['atr']); macd=safe_float(l['macd']); sig_v=safe_float(l['sig'])
 
-        sc=("score-high" if score>=65 else ("score-mid" if score>=45 else "score-low"))
-        tag=("tag-sbuy" if "STRONG" in signal else ("tag-buy" if "BUY" in signal else ("tag-sell" if "SELL" in signal or "WEAK" in signal else "tag-hold")))
+            sc=("score-high" if score>=65 else ("score-mid" if score>=45 else "score-low"))
+            tag=("tag-sbuy" if "STRONG" in signal else ("tag-buy" if "BUY" in signal else "tag-hold"))
 
-        st.markdown(f"### {target}")
-        c1,c2,c3,c4,c5 = st.columns(5)
-        with c1:
-            st.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>CONFLUENCE SCORE</div><div class='{sc}'>{score}/100</div></div>",unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>SIGNAL</div><div style='margin-top:8px'><span class='{tag}'>{signal}</span></div></div>",unsafe_allow_html=True)
-        with c3: st.metric("RSI (14)",f"{rsi:.1f}",delta="Oversold" if rsi<35 else ("Overbought" if rsi>72 else "Normal"))
-        with c4: st.metric("Volume", vlbl)
-        with c5: st.metric("ATR",f"{atr:.0f}",help="Volatilitas harian rata-rata")
+            st.markdown(f"### {target}")
+            c1,c2,c3,c4,c5 = st.columns(5)
+            with c1:
+                st.markdown(f"<div class='metric-card'><div>SCORE</div><div class='{sc}'>{score}/100</div></div>",unsafe_allow_html=True)
+            with c2:
+                st.markdown(f"<div class='metric-card'><div>SIGNAL</div><span class='{tag}'>{signal}</span></div>",unsafe_allow_html=True)
+            with c3: st.metric("RSI",f"{rsi:.1f}")
+            with c4: st.metric("Volume", vlbl)
+            with c5: st.metric("ATR",f"{atr:.0f}")
 
-        st.write("")
-        d1,d2,d3,d4,d5=st.columns(5)
-        d1.error(f"❌ SL: {sl:,.0f}")
-        d2.success(f"✅ TP: {tp:,.0f}")
-        d3.info(f"⚖️ R:R = 1:{rr}")
-        gap=(cl-e20)/e20*100 if e20 else 0
-        d4.metric("vs EMA20",f"{gap:+.2f}%")
-        d5.metric("MACD","Bullish ↑" if macd>sig_v else "Bearish ↓")
+            st.write("")
+            d1,d2,d3,d4,d5=st.columns(5)
+            d1.error(f"❌ SL: {sl:,.0f}")
+            d2.success(f"✅ TP: {tp:,.0f}")
+            d3.info(f"⚖️ R:R = 1:{rr}")
+            d4.metric("Entry",f"{entry:,.0f}")
+            d5.metric("Close",f"{cl:,.0f}")
 
-        left,mid,right=st.columns(3)
-        with left:
-            st.markdown("**📊 Score Breakdown**")
-            sdf=pd.DataFrame(list(detail.items()),columns=["Factor","Score"])
-            sdf["Max"]=[25,25,20,15,15]
-            fig_s=go.Figure(go.Bar(x=sdf["Score"],y=sdf["Factor"],orientation='h',
-                marker_color=['#00ff99' if s/m>=0.7 else ('#ffcc00' if s/m>=0.4 else '#ff4466') for s,m in zip(sdf["Score"],sdf["Max"])],
-                text=sdf["Score"],textposition='auto'))
-            fig_s.update_layout(height=200,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),xaxis=dict(range=[0,25]))
-            st.plotly_chart(fig_s,use_container_width=True)
-        with mid:
-            st.markdown("**🕯️ Patterns**")
-            for p in pats: st.write(p)
-            st.markdown("**📐 S/R Levels**")
-            if res: st.markdown(f"🔴 R: {' | '.join([f'{r:,.0f}' for r in res[:2]])}")
-            if sup: st.markdown(f"🟢 S: {' | '.join([f'{s:,.0f}' for s in sup[:2]])}")
-        with right:
-            st.markdown("**💡 Trade Setup**")
-            risk=cl-sl; rew=tp-cl
-            lot10=10_000_000/cl/100 if cl>0 else 0
-            st.markdown(f"""
-            - 💰 **Entry:** {cl:,.0f} – {cl*1.005:,.0f}
-            - ❌ **Max Loss/lot:** Rp {risk*100:,.0f}
-            - ✅ **Target/lot:** Rp {rew*100:,.0f}
-            - 📦 **Est. lot (10jt):** {lot10:.0f} lot
-            - ⏱️ **Hold:** 1–3 hari
-            """)
+            left,mid,right=st.columns(3)
+            with left:
+                st.markdown("**📊 Score Breakdown**")
+                sdf=pd.DataFrame(list(detail.items()),columns=["Factor","Score"])
+                sdf["Max"]=[25,25,20,15,15]
+                fig_s=go.Figure(go.Bar(x=sdf["Score"],y=sdf["Factor"],orientation='h',
+                    marker_color=['#00ff99' if s/m>=0.7 else ('#ffcc00' if s/m>=0.4 else '#ff4466') for s,m in zip(sdf["Score"],sdf["Max"])],
+                    text=sdf["Score"],textposition='auto'))
+                fig_s.update_layout(height=200,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),xaxis=dict(range=[0,25]))
+                st.plotly_chart(fig_s,use_container_width=True)
+            with mid:
+                st.markdown("**🕯️ Patterns**")
+                for p in pats: st.write(p)
+                st.markdown("**📐 S/R Levels**")
+                if res: st.markdown(f"🔴 R: {' | '.join([f'{r:,.0f}' for r in res[:2]])}")
+                if sup: st.markdown(f"🟢 S: {' | '.join([f'{s:,.0f}' for s in sup[:2]])}")
+            with right:
+                st.markdown("**💡 Trade Setup**")
+                lot10=10_000_000/entry/100 if entry>0 else 0
+                st.markdown(f"""
+                - 💰 **Entry:** {entry:,.0f}
+                - ❌ **SL:** {sl:,.0f} ({(entry-sl)/entry*100:.1f}%)
+                - ✅ **TP:** {tp:,.0f} ({(tp-entry)/entry*100:.1f}%)
+                - 📦 **Lot (10jt):** {lot10:.0f}
+                - ⏱️ **Hold:** 1-3 hari
+                """)
 
-        interp_html, conf_lbl, conf_clr = interpret_analysis(
-            target, score, detail, signal, df, sl, tp, rr,
-            pats, vr, vsurge_light, vsurge_strong, ihsg_change
-        )
-        st.markdown(interp_html, unsafe_allow_html=True)
+            interp_html, conf_lbl, conf_clr = interpret_analysis(
+                target, score, detail, signal, df, sl, tp, rr,
+                pats, vr, vsurge_light, vsurge_strong, ihsg_change
+            )
+            st.markdown(interp_html, unsafe_allow_html=True)
 
-        fig=make_subplots(rows=3,cols=1,shared_xaxes=True,row_heights=[0.55,0.25,0.20],
-                          vertical_spacing=0.04,subplot_titles=("Price + Indicators","MACD","RSI + Volume"))
-        fig.add_trace(go.Candlestick(x=df.index,open=df['open'],high=df['high'],low=df['low'],close=df['close'],
-                                     increasing_line_color='#00ff99',decreasing_line_color='#ff4466',name='Price'),row=1,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['ema20'],line=dict(color='orange',width=1.8),name='EMA20'),row=1,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['ema50'],line=dict(color='#00aaff',width=1.2,dash='dot'),name='EMA50'),row=1,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['bb_u'],line=dict(color='rgba(180,180,255,0.35)',width=1),name='BB',showlegend=False),row=1,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['bb_l'],fill='tonexty',fillcolor='rgba(80,80,255,0.04)',
-                                  line=dict(color='rgba(180,180,255,0.35)',width=1),showlegend=False),row=1,col=1)
-        fig.add_hline(y=sl,line_dash="dash",line_color="#ff4466",annotation_text=f"SL {sl:,.0f}",row=1,col=1)
-        fig.add_hline(y=tp,line_dash="dash",line_color="#00ff99",annotation_text=f"TP {tp:,.0f}",row=1,col=1)
-        hc=['#00ff99' if v>=0 else '#ff4466' for v in df['hist'].fillna(0)]
-        fig.add_trace(go.Bar(x=df.index,y=df['hist'],marker_color=hc,name='Hist',showlegend=False),row=2,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['macd'],line=dict(color='#00bbff',width=1.5),name='MACD'),row=2,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['sig'],line=dict(color='orange',width=1.5),name='Signal'),row=2,col=1)
-        fig.add_trace(go.Scatter(x=df.index,y=df['rsi'],line=dict(color='#bb77ff',width=1.5),name='RSI'),row=3,col=1)
-        fig.add_hline(y=72,line_dash="dot",line_color="red",annotation_text="OB (72)",row=3,col=1)
-        fig.add_hline(y=30,line_dash="dot",line_color="green",annotation_text="OS (30)",row=3,col=1)
-        fig.add_hrect(y0=55,y1=72,fillcolor="rgba(0,255,150,0.05)",line_width=0,row=3,col=1)
-        vc=['#00ff99' if c>=o else '#ff4466' for c,o in zip(df['close'],df['open'])]
-        fig.add_trace(go.Bar(x=df.index,y=df['volume']/df['volume'].max()*30,marker_color=vc,
-                              opacity=0.35,showlegend=False),row=3,col=1)
-        fig.update_layout(height=680,template='plotly_dark',xaxis_rangeslider_visible=False,
-                          legend=dict(orientation='h',y=1.02),margin=dict(l=0,r=0,t=30,b=0))
-        st.plotly_chart(fig,use_container_width=True)
+            # Chart (sama seperti sebelumnya)
+            fig=make_subplots(rows=3,cols=1,shared_xaxes=True,row_heights=[0.55,0.25,0.20],
+                              vertical_spacing=0.04)
+            fig.add_trace(go.Candlestick(x=df.index,open=df['open'],high=df['high'],low=df['low'],close=df['close'],
+                                         increasing_line_color='#00ff99',decreasing_line_color='#ff4466'),row=1,col=1)
+            fig.add_trace(go.Scatter(x=df.index,y=df['ema20'],line=dict(color='orange',width=1.8)),row=1,col=1)
+            fig.add_trace(go.Scatter(x=df.index,y=df['ema50'],line=dict(color='#00aaff',width=1.2,dash='dot')),row=1,col=1)
+            fig.add_hline(y=sl,line_dash="dash",line_color="#ff4466",annotation_text=f"SL {sl:,.0f}",row=1,col=1)
+            fig.add_hline(y=tp,line_dash="dash",line_color="#00ff99",annotation_text=f"TP {tp:,.0f}",row=1,col=1)
+            fig.add_hline(y=entry,line_dash="dot",line_color="#ffcc00",annotation_text=f"Entry {entry:,.0f}",row=1,col=1)
+            hc=['#00ff99' if v>=0 else '#ff4466' for v in df['hist'].fillna(0)]
+            fig.add_trace(go.Bar(x=df.index,y=df['hist'],marker_color=hc),row=2,col=1)
+            fig.add_trace(go.Scatter(x=df.index,y=df['macd'],line=dict(color='#00bbff')),row=2,col=1)
+            fig.add_trace(go.Scatter(x=df.index,y=df['sig'],line=dict(color='orange')),row=2,col=1)
+            fig.add_trace(go.Scatter(x=df.index,y=df['rsi'],line=dict(color='#bb77ff')),row=3,col=1)
+            fig.add_hline(y=72,line_dash="dot",line_color="red",annotation_text="OB",row=3,col=1)
+            fig.add_hline(y=30,line_dash="dot",line_color="green",annotation_text="OS",row=3,col=1)
+            vc=['#00ff99' if c>=o else '#ff4466' for c,o in zip(df['close'],df['open'])]
+            fig.add_trace(go.Bar(x=df.index,y=df['volume']/df['volume'].max()*30,marker_color=vc,opacity=0.35),row=3,col=1)
+            fig.update_layout(height=680,template='plotly_dark',xaxis_rangeslider_visible=False)
+            st.plotly_chart(fig,use_container_width=True)
     else:
         st.warning(f"Data tidak cukup untuk {target}.")
 
 st.divider()
 
 # ==================================================
-# SMART SCANNER — DENGAN PILIHAN HOLD PERIOD
+# SMART SCANNER (menggunakan teknikal entry)
 # ==================================================
 st.subheader("🎯 Smart Scanner — Pilih Universe & Hold Period")
-
 sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
 with sc1:
-    idx_choice = st.selectbox("📊 Universe / Indeks:",list(INDEX_UNIVERSE.keys()))
+    idx_choice = st.selectbox("📊 Universe:",list(INDEX_UNIVERSE.keys()))
 with sc2:
-    also_sector = st.multiselect("➕ Tambah Sektor Manual:",list(MANUAL_SECTORS.keys()))
+    also_sector = st.multiselect("➕ Sektor:",list(MANUAL_SECTORS.keys()))
 with sc3:
     min_score = st.slider("Min Score:",0,100,55)
 with sc4:
-    top_n = st.number_input("Top N Hasil:",5,50,10)
+    top_n = st.number_input("Top N:",5,50,10)
 
-# Hold Period
-hold_period = st.radio("⏱️ Hold Period (hari)", options=[1, 3], index=1, horizontal=True, help="1 hari = exit besok, 3 hari = max 3 hari")
-
+hold_period = st.radio("⏱️ Hold Period (hari)", [1,3], index=1, horizontal=True)
 is_all_bei = "ALL BEI" in idx_choice
 
 selected_universe = INDEX_UNIVERSE[idx_choice]
@@ -1067,47 +1033,33 @@ combined_universe = list(dict.fromkeys(selected_universe + extra_from_sector))
 col_info1,col_info2=st.columns([3,1])
 with col_info1:
     badge_html=" ".join([f"<span class='universe-badge'>{t}</span>" for t in combined_universe[:40]])
-    if len(combined_universe)>40: badge_html+=f" <span class='universe-badge'>+{len(combined_universe)-40} lainnya</span>"
-    st.markdown(f"**Universe aktif: {len(combined_universe)} saham**<br>{badge_html}",unsafe_allow_html=True)
+    st.markdown(f"**Universe: {len(combined_universe)} saham**<br>{badge_html}",unsafe_allow_html=True)
 with col_info2:
     signal_filter=st.selectbox("Filter Signal:",["Semua BUY","Strong BUY Only","Semua (incl HOLD)"])
 
-st.write("")
-
-with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
+with st.expander("⚙️ Filter Tambahan", expanded=False):
     fc1,fc2,fc3=st.columns(3)
     with fc1:
         min_vol_ratio=st.slider("Min Volume Ratio:",0.5,3.0,1.0,0.1)
-        require_surge=st.checkbox("Wajib Volume Surge (🔥 ≥1.5x)",value=False)
+        require_surge=st.checkbox("Wajib Volume Surge",value=False)
     with fc2:
         min_rsi=st.slider("RSI Min:",10,50,30)
         max_rsi=st.slider("RSI Max:",50,90,70)
     with fc3:
-        require_macd_bull=st.checkbox("Wajib MACD Bullish Cross",value=False)
+        require_macd_bull=st.checkbox("Wajib MACD Bullish",value=False)
         require_above_ema=st.checkbox("Wajib Price > EMA20",value=True)
-
     if is_all_bei:
-        st.divider()
-        st.markdown("**⚡ Pengaturan Parallel Scan (ALL BEI)**")
-        p1, p2, p3 = st.columns(3)
-        with p1:
-            max_workers = st.slider("Jumlah Thread Paralel:", 3, 20, 10)
-        with p2:
-            use_vol_prefilter = st.checkbox("Pre-filter volume sebelum analisis penuh", value=True)
-            min_avg_lot = st.slider("Min avg volume (lot/hari):", 100, 2000, 500) if use_vol_prefilter else 500
-        with p3:
-            st.info(f"Estimasi waktu: {'4–8 menit (pre-filter aktif)' if use_vol_prefilter else '8–15 menit'}")
+        max_workers = st.slider("Thread Paralel:",3,20,10, key="mw")
+        use_vol_prefilter = st.checkbox("Pre-filter volume", value=True)
+        min_avg_lot = st.slider("Min avg lot:",100,2000,500) if use_vol_prefilter else 500
     else:
         max_workers = 10
         use_vol_prefilter = False
         min_avg_lot = 500
 
-show_debug = st.checkbox("🐛 Debug Mode — tampilkan kenapa saham kegugur", value=False)
+show_debug = st.checkbox("Debug Mode", value=False)
 
-if is_all_bei:
-    st.info(f"🆕 **Mode ALL BEI Aktif** — {len(combined_universe)} saham, {max_workers} thread paralel.")
-
-if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary"):
+if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
     tickers_to_scan = add_jk(combined_universe)
     prog=st.progress(0); status=st.empty()
     start_time = time.time()
@@ -1119,7 +1071,6 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
     )
 
     if is_all_bei:
-        status.markdown(f"⚡ Memulai parallel scan **{len(tickers_to_scan)} saham**...")
         results, debug_log, errors = run_parallel_scan(
             tickers_to_scan, scan_params,
             max_workers=max_workers,
@@ -1130,482 +1081,120 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         results=[]; debug_log=[]; errors=0
         for i,t in enumerate(tickers_to_scan):
             prog.progress((i+1)/len(tickers_to_scan))
-            status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: **{len(results)}**")
+            status.markdown(f"Scanning {t}... ({i+1}/{len(tickers_to_scan)}) | Candidates: {len(results)}")
             ticker_name = t.replace(".JK","")
             try:
                 d = analyze_full_cached(t, period="6mo")
                 if d is None or d.empty:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Data","Alasan":"Data kosong"})
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Data"})
                     continue
                 last=d.iloc[-1]
                 rsi_q=safe_float(last.get('rsi',50)); cl_q=safe_float(last.get('close',0))
                 ema_q=safe_float(last.get('ema20',cl_q)); macd_v=safe_float(last.get('macd',0)); sig_v2=safe_float(last.get('sig',0))
-
                 if not (min_rsi<=rsi_q<=max_rsi):
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"RSI","Alasan":f"RSI={rsi_q:.1f}"})
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"RSI"})
                     continue
                 if require_above_ema and cl_q<ema_q:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"EMA20","Alasan":f"Harga<EMA20"})
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"EMA20"})
                     continue
                 sc_val,sc_det=score_ticker(d)
                 if sc_val<min_score:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Score","Alasan":f"Score={sc_val}"})
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Score"})
                     continue
-                sig,_,sl_v,tp_v,rr_v=get_signal(d,sc_val)
+                entry, sl, tp, rr, sig, _ = get_technical_levels(d, sc_val)
+                if entry is None:
+                    continue
                 if "SELL" in sig or "WEAK" in sig:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Signal","Alasan":sig})
+                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Signal"})
                     continue
                 if signal_filter=="Strong BUY Only" and "STRONG" not in sig: continue
-                if signal_filter=="Semua BUY" and "BUY" not in sig and "BREAKOUT" not in sig: continue
+                if signal_filter=="Semua BUY" and "BUY" not in sig: continue
                 vr,vlbl,vsurge_light,vsurge_strong=volume_analysis(d)
                 if require_surge and not vsurge_light: continue
                 if vr<min_vol_ratio: continue
                 if require_macd_bull and macd_v<=sig_v2: continue
                 pats=detect_patterns(d)
                 results.append({
-                    "Ticker":ticker_name,"Score":sc_val,"Signal":sig,"Price":int(cl_q),
+                    "Ticker":ticker_name,"Score":sc_val,"Signal":sig,"Price":int(entry),
                     "RSI":round(rsi_q,1),"Vol":vlbl,"MACD":"✅" if macd_v>sig_v2 else "❌",
                     "EMA20":"✅" if cl_q>=ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-                    "SL":int(sl_v),"TP":int(tp_v),"R:R":f"1:{rr_v}","Pattern":pats[0] if pats else "—",
-                    "Trend_s":sc_det.get('Trend',0),"Mom_s":sc_det.get('Momentum',0),
-                    "_cl":cl_q,"_vr":vr,"_vsurge_l":vsurge_light,"_vsurge_s":vsurge_strong,
+                    "SL":int(sl),"TP":int(tp),"R:R":f"1:{rr}","Pattern":pats[0] if pats else "—",
                 })
             except Exception as e:
                 errors+=1
-                if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur di":"Exception","Alasan":str(e)})
+                if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Exception","Alasan":str(e)})
 
     elapsed = time.time() - start_time
     prog.empty(); status.empty()
-
-    st.caption(f"⏱️ Scan selesai dalam **{elapsed:.1f} detik** | {len(tickers_to_scan)} ticker | {errors} error")
+    st.caption(f"⏱️ Scan selesai dalam {elapsed:.1f} detik | {len(tickers_to_scan)} ticker | {errors} error")
 
     if show_debug and debug_log:
-        with st.expander(f"🐛 Debug Log — {len(debug_log)} saham kegugur", expanded=True):
-            df_debug = pd.DataFrame(debug_log)
-            st.dataframe(df_debug, use_container_width=True, hide_index=True)
+        with st.expander("Debug Log", expanded=True):
+            st.dataframe(pd.DataFrame(debug_log))
 
     if results:
         df_res=pd.DataFrame(results).sort_values("Score",ascending=False).head(top_n)
-        df_res['Verdict'] = df_res.apply(lambda r: interpret_scanner_row(r, ihsg_change), axis=1)
-
-        def color_score(val):
-            if val>=70: return 'background-color:#004422;color:#00ff99'
-            elif val>=55: return 'background-color:#332200;color:#ffcc00'
-            else: return 'background-color:#2a0010;color:#ff8888'
-
-        display_cols=["Ticker","Score","Signal","Price","RSI","Vol","MACD","EMA20","SL","TP","R:R","Pattern"]
-        styled=df_res[display_cols].style.map(color_score,subset=['Score'])
-        st.dataframe(styled,use_container_width=True,hide_index=True)
-        st.success(f"✅ **{len(df_res)} kandidat** dari {len(tickers_to_scan)} discan | Errors: {errors}")
-
-        # Simpan ke tracker dengan hold_period yang dipilih
+        st.dataframe(df_res, use_container_width=True)
         n_saved = save_scan_results_to_log(df_res, hold_days=hold_period)
         if n_saved > 0:
-            st.info(f"💾 **{n_saved} rekomendasi** disimpan ke tracker dengan hold period {hold_period} hari. "
-                    f"Hasil WIN/LOSS akan muncul otomatis setelah jam 15:30 WIB atau setelah {hold_period} hari.")
-        else:
-            st.caption("ℹ️ Semua ticker hari ini sudah tercatat di tracker.")
-
-        st.markdown("### 📝 Interpretasi Tiap Saham")
-        for _, row in df_res.iterrows():
-            score_v = row['Score']
-            sc_clr  = "#00ff99" if score_v>=70 else ("#ffcc00" if score_v>=55 else "#ff4466")
-            st.markdown(f"""
-            <div style='background:#0a1020;border:1px solid #1e3050;border-left:3px solid {sc_clr};
-                        border-radius:8px;padding:12px 16px;margin:6px 0;display:flex;
-                        align-items:flex-start;gap:14px;'>
-                <div style='min-width:90px;text-align:center;'>
-                    <div style='font-size:16px;font-weight:900;color:#00bbff'>{row['Ticker']}</div>
-                    <div style='font-size:20px;font-weight:900;color:{sc_clr}'>{score_v}</div>
-                    <div style='font-size:9px;color:#445'>/ 100</div>
-                    <div style='font-size:10px;color:#667;margin-top:2px'>Rp {row['Price']:,}</div>
-                </div>
-                <div style='flex:1;color:#bbc;font-size:13px;line-height:1.7'>{row['Verdict']}</div>
-                <div style='min-width:110px;text-align:right;font-size:11px;color:#556'>
-                    RSI: {row['RSI']}<br>Vol: {row['Vol']}<br>MACD: {row['MACD']}<br>
-                    <span style='color:#ff6666'>SL: {row['SL']:,}</span><br>
-                    <span style='color:#66ff99'>TP: {row['TP']:,}</span><br>
-                    <span style='color:#aaaaff'>{row['R:R']}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-        st.markdown("### 🏆 Top 3 Setup Terbaik — Analisis Lengkap")
-        top3=df_res.head(3)
-        for i,(_, row) in enumerate(top3.iterrows()):
-            sc2 = ("score-high" if row['Score']>=65 else "score-mid")
-            tg  = ("tag-sbuy"  if "STRONG" in row['Signal'] else "tag-buy")
-            medal=["🥇","🥈","🥉"][i]
-            try:
-                df_top = analyze_full(f"{row['Ticker']}.JK", period="6mo")
-                if df_top is not None:
-                    sc_v2, det_v2 = score_ticker(df_top)
-                    sig_v2, _, sl_v2, tp_v2, rr_v2 = get_signal(df_top, sc_v2)
-                    pats_v2 = detect_patterns(df_top)
-                    vr_v2, _, vsl_v2, vss_v2 = volume_analysis(df_top)
-                    full_html, conf_lbl, conf_clr = interpret_analysis(
-                        f"{row['Ticker']}.JK", sc_v2, det_v2, sig_v2,
-                        df_top, sl_v2, tp_v2, rr_v2, pats_v2, vr_v2, vsl_v2, vss_v2, ihsg_change
-                    )
-                else:
-                    full_html = "<p style='color:#556'>Interpretasi detail tidak tersedia.</p>"
-            except:
-                full_html = "<p style='color:#556'>Interpretasi detail tidak tersedia.</p>"
-
-            with st.expander(f"{medal} #{i+1} {row['Ticker']} — Score {row['Score']}/100 | {row['Signal']} | Rp {row['Price']:,}", expanded=(i==0)):
-                col_a, col_b = st.columns([1, 2])
-                with col_a:
-                    st.markdown(f"""
-                    <div class='metric-card'>
-                        <div style='font-size:22px;font-weight:900;color:#00bbff'>{row['Ticker']}</div>
-                        <div class='{sc2}'>{row['Score']}/100</div>
-                        <div style='margin:8px 0'><span class='{tg}'>{row['Signal']}</span></div>
-                        <hr style='border-color:#1e3050'>
-                        <div style='font-size:12px;color:#778;text-align:left;line-height:1.9'>
-                        💰 Harga: <b>Rp {row['Price']:,}</b><br>
-                        📊 RSI: <b>{row['RSI']}</b><br>
-                        📦 Volume: <b>{row['Vol']}</b><br>
-                        📈 MACD: <b>{row['MACD']}</b><br>
-                        📐 EMA20: <b>{row['EMA20']}</b><br>
-                        🕯️ Pattern: <b>{row['Pattern']}</b><br>
-                        <hr style='border-color:#1e3050;margin:6px 0'>
-                        ❌ SL: <span style='color:#ff6666'>{row['SL']:,}</span><br>
-                        ✅ TP: <span style='color:#66ff99'>{row['TP']:,}</span><br>
-                        ⚖️ R:R: <span style='color:#aaaaff'>{row['R:R']}</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with col_b:
-                    st.markdown(full_html, unsafe_allow_html=True)
-
-        st.markdown("### 📊 Distribusi Score")
-        fig_dist=go.Figure()
-        fig_dist.add_trace(go.Bar(
-            x=df_res['Ticker'], y=df_res['Score'],
-            marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
-            text=df_res['Score'], textposition='outside'
-        ))
-        fig_dist.add_hline(y=70,line_dash="dot",line_color="#00ff99",annotation_text="Strong Buy Zone")
-        fig_dist.add_hline(y=55,line_dash="dot",line_color="#ffcc00",annotation_text="Buy Zone")
-        fig_dist.update_layout(height=300,template='plotly_dark',margin=dict(l=0,r=0,t=10,b=0),
-                                yaxis=dict(range=[0,105]),showlegend=False)
-        st.plotly_chart(fig_dist,use_container_width=True)
-
-        st.divider()
-        st.subheader("📋 Morning Review — Panduan Eksekusi")
-        mktbias="🟢 BULLISH" if ihsg_change>0.3 else ("🔴 BEARISH" if ihsg_change<-0.3 else "🟡 SIDEWAYS")
-        strong_picks=[r['Ticker'] for _,r in df_res.iterrows() if "STRONG" in r['Signal']]
-        surge_picks=[r['Ticker'] for _,r in df_res.iterrows() if "🔥" in str(r.get('Vol',''))]
-        st.markdown(f"""
-        <div style='background:#0a1020;border:1px solid #1e3050;border-radius:12px;padding:20px;'>
-        <b>🌐 IHSG:</b> {ihsg_df['close'].iloc[-1]:,.0f} <span style='color:{"#00ff99" if ihsg_change>0 else "#ff4466"}'>{ihsg_change:+.2f}%</span> — {mktbias}<br><br>
-        <b>⚡ Strong Buy:</b> {', '.join(strong_picks) if strong_picks else '—'}<br>
-        <b>🔥 Volume Surge:</b> {', '.join(surge_picks) if surge_picks else '—'}<br><br>
-        <b>📌 Panduan Eksekusi (Hold {hold_period} hari):</b>
-        <ol style='color:#99aacc;margin-top:8px'>
-        <li>Prioritaskan saham <b>Score ≥ 70 + Volume Surge 🔥</b> → Setup Premium.</li>
-        <li>Jika IHSG {mktbias}, {"hanya masuk setup terkuat (Score ≥ 70)" if "BEARISH" in mktbias else "bisa lebih agresif tapi tetap pakai SL"}.</li>
-        <li>Masuk dekat <b>Support / EMA20</b>, bukan setelah saham sudah lari jauh.</li>
-        <li>R:R wajib ≥ 1:2 sebelum eksekusi.</li>
-        <li>MACD Cross ✅ + RSI 40–60 + Volume Surge = <b>trifecta signal terkuat</b>.</li>
-        </ol>
-        </div>
-        """, unsafe_allow_html=True)
+            st.info(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
+        st.success(f"✅ {len(df_res)} kandidat dari {len(tickers_to_scan)} discan")
     else:
-        st.warning("Tidak ada saham yang memenuhi kriteria. Coba turunkan min score.")
+        st.warning("Tidak ada saham memenuhi kriteria.")
 
 st.divider()
 
 # ==================================================
-# WIN/LOSS TRACKER — TAMPILAN DENGAN PROGRESS
+# WIN/LOSS TRACKER (sama)
 # ==================================================
-st.subheader("📊 Win/Loss Tracker — Rekap Performa Rekomendasi Harian")
-
-market_closed, jam_sekarang = is_market_closed()
-if market_closed:
-    st.caption(f"🟢 Bursa sudah tutup ({jam_sekarang}) — auto-resolve aktif setiap halaman dibuka.")
-else:
-    st.caption(f"🟡 Bursa belum tutup ({jam_sekarang}) — hasil akan di-resolve otomatis setelah 15:30 WIB atau setelah hold period.")
-
+st.subheader("📊 Win/Loss Tracker")
 logs = load_trade_log()
-
 if not logs:
-    st.info("📭 Belum ada data. Jalankan scanner dulu — hasil otomatis tersimpan ke tracker.")
+    st.info("Belum ada data. Jalankan scanner.")
 else:
     stats = compute_tracker_stats(logs)
+    m1,m2,m3,m4,m5,m6 = st.columns(6)
+    m1.metric("Win Rate", f"{stats['win_rate']}%")
+    m2.metric("Menang", stats['wins'])
+    m3.metric("Kalah", stats['losses'])
+    m4.metric("Open", stats['opens'])
+    m5.metric("Avg P&L", f"{stats['avg_pnl']:+.2f}%")
+    m6.metric("Total P&L", f"{stats['total_pnl']:+.2f}%")
 
-    # KPI
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-    wr_clr = "#00ff99" if stats['win_rate']>=60 else ("#ffcc00" if stats['win_rate']>=45 else "#ff4466")
-    m1.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>WIN RATE</div>"
-                f"<div style='font-size:28px;font-weight:900;color:{wr_clr}'>{stats['win_rate']}%</div>"
-                f"<div style='color:#445;font-size:11px'>{stats['wins']}W / {stats['losses']}L</div></div>",
-                unsafe_allow_html=True)
-    m2.metric("✅ Menang",         stats['wins'])
-    m3.metric("❌ Kalah",          stats['losses'])
-    m4.metric("⏳ Open",           stats['opens'])
-    m5.metric("📈 Avg P&L/trade", f"{stats['avg_pnl']:+.2f}%")
-    m6.metric("💰 Total P&L",     f"{stats['total_pnl']:+.2f}%")
-
-    # Tampilkan win rate per hold period dengan pengecekan zero division
-    def format_wr(stats_dict):
-        total = stats_dict['total']
-        wins = stats_dict['wins']
-        if total == 0:
-            return "0/0 (0.0%)"
-        return f"{wins}/{total} ({wins/total*100:.1f}%)"
-
-    st.caption(f"📊 Win Rate per Hold Period: 1 Hari = {format_wr(stats['stats_1d'])} | "
-               f"3 Hari = {format_wr(stats['stats_3d'])}")
-
-    # TAMPILAN REKOMENDASI AKTIF (OPEN)
     open_trades = [l for l in logs if l["status"] == "OPEN"]
     if open_trades:
-        st.markdown("### 🔄 Rekomendasi Aktif & Progress")
-        open_trades_sorted = sorted(open_trades, key=lambda x: x["date"])
-        for trade in open_trades_sorted:
+        st.markdown("### 🔄 Rekomendasi Aktif")
+        for trade in open_trades:
             target_date = date.fromisoformat(trade["date"])
             hold_days = trade.get("hold_days", 3)
             entry = float(trade["entry"])
             sl = float(trade["sl"])
             tp = float(trade["tp"])
             ticker = trade["ticker"]
-
-            status, curr_price, exit_date, action, pnl, days_held, dist_tp, dist_sl = evaluate_trade_progress(
+            status, curr_price, _, action, _, days_held, _, _ = evaluate_trade_progress(
                 ticker, entry, sl, tp, target_date, hold_days
             )
             if status != "OPEN":
                 trade["status"] = status
                 trade["exit_price"] = curr_price
-                trade["exit_date"] = str(exit_date) if exit_date else None
                 trade["auto_resolved"] = True
-                trade["note"] = action
                 save_trade_log(logs)
                 st.rerun()
-                break
-
-            if curr_price:
-                progress_to_tp = max(0, min(100, (curr_price - entry) / (tp - entry) * 100 if tp != entry else 0))
-                dist_to_sl_pct = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
-            else:
-                progress_to_tp = 0
-                dist_to_sl_pct = 0
-
-            act_color = "#00ff99" if "Segera TP" in action else ("#ff4466" if "Cut loss" in action else ("#88ff88" if "Menuju TP" in action else ("#ffaa66" if "Mendekati SL" in action else "#ffcc00")))
-
             st.markdown(f"""
-            <div style='background:#0a1020;border:1px solid #1e3050;border-radius:12px;padding:16px;margin:12px 0;'>
-                <div style='display:flex;justify-content:space-between;align-items:center;'>
-                    <div>
-                        <span style='font-size:20px;font-weight:900;color:#00bbff'>{ticker}</span>
-                        <span style='background:#1e3050;border-radius:20px;padding:2px 8px;margin-left:10px;font-size:12px'>Hold {hold_days} hari</span>
-                    </div>
-                    <div style='color:{act_color};font-weight:bold;background:#1e1e3e;padding:4px 12px;border-radius:20px;'>
-                        {action}
-                    </div>
-                </div>
-                <div style='display:flex;flex-wrap:wrap;gap:20px;margin-top:12px;'>
-                    <div><span style='color:#667'>Entry:</span> <b>Rp {entry:,.0f}</b></div>
-                    <div><span style='color:#667'>Current:</span> <b>Rp {curr_price:,.0f}</b></div>
-                    <div><span style='color:#667'>SL:</span> <span style='color:#ff6666'>Rp {sl:,.0f}</span></div>
-                    <div><span style='color:#667'>TP:</span> <span style='color:#66ff99'>Rp {tp:,.0f}</span></div>
-                    <div><span style='color:#667'>Hari ke-:</span> {days_held} / {hold_days}</div>
-                </div>
-                <div style='margin-top:12px;'>
-                    <div class='progress-label'>Progress ke TP ({(curr_price-entry)/(tp-entry)*100:.1f}%)</div>
-                    <div class='progress-bar-container'><div class='progress-bar-fill' style='width:{progress_to_tp}%; background:#00ff99;'></div></div>
-                </div>
-                <div style='margin-top:8px;'>
-                    <div class='progress-label'>Jarak ke SL: {dist_to_sl_pct:.2f}%</div>
-                    <div class='progress-bar-container'><div class='progress-bar-fill' style='width:{min(100, dist_to_sl_pct*10)}%; background:#ff4466;'></div></div>
-                </div>
-                <div style='margin-top:12px;color:#889;font-size:12px;'>
-                    📅 Entry: {trade['date']} | Signal: {trade['signal']} | Score: {trade['score']}
-                </div>
+            <div style='background:#0a1020;border-radius:12px;padding:12px;margin:8px 0;'>
+                <b>{ticker}</b> | Entry {entry:,.0f} | SL {sl:,.0f} | TP {tp:,.0f}<br>
+                Current: {curr_price:,.0f} | Hari ke-{days_held}/{hold_days} | {action}
             </div>
             """, unsafe_allow_html=True)
 
-    # HISTORY HARIAN
-    st.markdown("### 📅 History Harian — Hijau = WIN, Merah = LOSS")
+    # History harian (singkat)
+    st.markdown("### 📅 History")
     all_dates = sorted({r['date'] for r in logs}, reverse=True)
+    for scan_date in all_dates[:5]:
+        day_recs = [r for r in logs if r['date'] == scan_date]
+        wins_d = len([r for r in day_recs if r['status']=='WIN'])
+        losses_d = len([r for r in day_recs if r['status']=='LOSS'])
+        st.write(f"{scan_date}: ✅ {wins_d}  ❌ {losses_d}")
 
-    for scan_date in all_dates:
-        day_recs  = [r for r in logs if r['date'] == scan_date]
-        wins_d    = [r for r in day_recs if r['status']=='WIN']
-        losses_d  = [r for r in day_recs if r['status']=='LOSS']
-        open_d    = [r for r in day_recs if r['status']=='OPEN']
-        total_cl  = len(wins_d)+len(losses_d)
-        wr_day    = len(wins_d)/total_cl*100 if total_cl>0 else None
-        day_clr   = "#00ff99" if (wr_day or 0)>=60 else ("#ffcc00" if (wr_day or 0)>=40 else "#ff4466")
-        if total_cl==0: day_clr="#445566"
-        wr_lbl    = f"{wr_day:.0f}% WR" if wr_day is not None else "Open"
-        open_lbl  = f" · {len(open_d)} open" if open_d else ""
-
-        with st.expander(
-            f"📅 {scan_date}  |  {len(wins_d)}✅ {len(losses_d)}❌{open_lbl}  ·  {wr_lbl}",
-            expanded=False
-        ):
-            card_cols=st.columns(min(len(day_recs),4))
-            for ci,r in enumerate(day_recs):
-                col=card_cols[ci%len(card_cols)]
-                s=r['status']
-                auto_badge = " 🤖" if r.get("auto_resolved") else " ✏️"
-                if s=='WIN':
-                    bg,border,badge,txt="#002a14","#00ff99",f"✅ WIN +{r.get('exit_price',0):.0f}{auto_badge}","#00ff99"
-                elif s=='LOSS':
-                    bg,border,badge,txt="#2a0010","#ff4466",f"❌ LOSS {r.get('exit_price',0):.0f}{auto_badge}","#ff4466"
-                else:
-                    bg,border,badge,txt="#001433","#2255aa","⏳ OPEN","#4488ff"
-
-                pnl_str=""
-                if r.get('exit_price') and r.get('entry'):
-                    p=(float(r['exit_price'])-float(r['entry']))/float(r['entry'])*100
-                    pnl_clr="#00ff99" if p>=0 else "#ff4466"
-                    pnl_str=f"<div style='color:{pnl_clr};font-weight:bold;font-size:14px'>{p:+.2f}%</div>"
-
-                col.markdown(f"""
-                <div style='background:{bg};border:1px solid {border};border-radius:8px;
-                            padding:10px;margin:4px 0;text-align:center;'>
-                    <div style='font-size:15px;font-weight:900;color:#00bbff'>{r['ticker']}</div>
-                    <div style='font-size:11px;color:#556'>Score: {r['score']} | Entry: {int(float(r['entry'])):,}</div>
-                    <div style='font-size:11px;color:#445'>SL {int(float(r['sl'])):,} → TP {int(float(r['tp'])):,}</div>
-                    {pnl_str}
-                    <div style='font-weight:bold;color:{txt};font-size:12px;margin-top:4px'>{badge}</div>
-                    {'<div style="font-size:10px;color:#445">Exit: '+str(int(float(r['exit_price'])))+' ('+str(r.get('exit_date','')[:10])+')</div>' if r.get('exit_price') else ''}
-                </div>
-                """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # UPDATE MANUAL
-    st.markdown("#### ✏️ Update Hasil Trade Manual")
-    open_logs = [l for l in logs if l["status"] == "OPEN"]
-    if open_logs:
-        options_label = [
-            f"{l['date']} — {l['ticker']} | Entry: {float(l['entry']):,.0f} | SL: {float(l['sl']):,.0f} | TP: {float(l['tp']):,.0f} | Hold: {l.get('hold_days',3)} hari"
-            for l in open_logs
-        ]
-        sel_idx = st.selectbox(f"Pilih trade open ({len(open_logs)} aktif):",
-                               range(len(options_label)),
-                               format_func=lambda i: options_label[i], key="sel_trade_open")
-        sel_log = open_logs[sel_idx]
-
-        uc1,uc2,uc3,uc4=st.columns(4)
-        with uc1: new_status=st.selectbox("Status akhir:",["WIN","LOSS","MANUAL"],key="new_status_sel")
-        with uc2:
-            default_exit=float(sel_log["tp"]) if new_status=="WIN" else float(sel_log["sl"])
-            exit_price=st.number_input("Harga exit (Rp):",min_value=0.0,value=default_exit,step=10.0,key="exit_price_input")
-        with uc3: exit_date_input=st.date_input("Tanggal exit:",value=datetime.today(),key="exit_date_input")
-        with uc4: note_input=st.text_input("Catatan:",key="note_input_field")
-
-        if exit_price>0 and sel_log.get("entry"):
-            preview_pnl=(exit_price-float(sel_log["entry"]))/float(sel_log["entry"])*100
-            pnl_color="#00ff99" if preview_pnl>=0 else "#ff4466"
-            st.markdown(f"<span style='color:{pnl_color}'>Preview P&L: {preview_pnl:+.2f}%</span>",unsafe_allow_html=True)
-
-        if st.button("💾 Simpan Update Trade",key="save_trade_update",type="primary"):
-            for l in logs:
-                if l["id"]==sel_log["id"]:
-                    l["status"]=new_status; l["exit_price"]=float(exit_price)
-                    l["exit_date"]=str(exit_date_input); l["note"]=note_input
-                    l["auto_resolved"]=False
-                    break
-            save_trade_log(logs)
-            st.success(f"✅ Trade **{sel_log['ticker']}** diupdate ke **{new_status}**.")
-            st.rerun()
-    else:
-        st.success("🎉 Tidak ada trade open saat ini!")
-
-    # TAMBAH MANUAL
-    with st.expander("➕ Tambah Trade Manual", expanded=False):
-        tm1,tm2,tm3=st.columns(3)
-        with tm1:
-            m_ticker=st.text_input("Kode Saham:",key="m_ticker").upper()
-            m_signal=st.selectbox("Signal:",["⚡ STRONG BUY","✅ BUY","🔄 HOLD/WATCH"],key="m_signal")
-            m_score=st.number_input("Score:",0,100,60,key="m_score")
-            m_hold=st.selectbox("Hold Period (hari):",[1,3],index=1,key="m_hold")
-        with tm2:
-            m_entry=st.number_input("Harga Entry (Rp):",min_value=0.0,step=10.0,key="m_entry")
-            m_sl=st.number_input("Stop Loss (Rp):",min_value=0.0,step=10.0,key="m_sl")
-            m_tp=st.number_input("Take Profit (Rp):",min_value=0.0,step=10.0,key="m_tp")
-        with tm3:
-            m_date=st.date_input("Tanggal Entry:",value=datetime.today(),key="m_date")
-            m_pattern=st.text_input("Pattern:",key="m_pattern")
-            m_note=st.text_input("Catatan:",key="m_note")
-
-        if st.button("➕ Tambah ke Tracker",key="add_manual_trade"):
-            if m_ticker and m_entry>0:
-                logs=load_trade_log(); trade_id=f"{m_date}_{m_ticker}_manual"
-                if any(l["id"]==trade_id for l in logs):
-                    st.warning(f"Trade {m_ticker} tanggal {m_date} sudah ada.")
-                else:
-                    rr_m=round((m_tp-m_entry)/(m_entry-m_sl),2) if (m_entry-m_sl)>0 else 0
-                    logs.append({"id":trade_id,"date":str(m_date),"ticker":m_ticker,"signal":m_signal,
-                                 "score":int(m_score),"entry":float(m_entry),"sl":float(m_sl),
-                                 "tp":float(m_tp),"rr":f"1:{rr_m}","pattern":m_pattern or "—",
-                                 "hold_days":m_hold,
-                                 "exit_price":None,"exit_date":None,"status":"OPEN",
-                                 "auto_resolved":False,"note":m_note})
-                    save_trade_log(logs)
-                    st.success(f"✅ Trade {m_ticker} ditambahkan."); st.rerun()
-            else:
-                st.error("Isi Kode Saham dan Harga Entry dulu.")
-
-    st.divider()
-
-    # LOG LENGKAP
-    st.markdown("#### 📋 Log Semua Trade")
-    f1,f2,f3=st.columns(3)
-    with f1: filter_status=st.selectbox("Filter Status:",["Semua","OPEN","WIN","LOSS","MANUAL"],key="fs_log")
-    with f2: filter_signal=st.selectbox("Filter Signal:",["Semua","STRONG BUY","BUY"],key="fg_log")
-    with f3: filter_date_str=st.text_input("Filter Tanggal (YYYY-MM-DD):",key="fd_log")
-
-    df_log=pd.DataFrame(logs)
-    if filter_status!="Semua": df_log=df_log[df_log["status"]==filter_status]
-    if filter_signal!="Semua":
-        df_log=df_log[df_log["signal"].str.contains("STRONG" if filter_signal=="STRONG BUY" else "BUY",na=False)]
-    if filter_date_str: df_log=df_log[df_log["date"]==filter_date_str]
-
-    def calc_pnl_str(row):
-        try:
-            if row["exit_price"] and row["entry"]:
-                p=(float(row["exit_price"])-float(row["entry"]))/float(row["entry"])*100
-                return f"{p:+.2f}%"
-        except: pass
-        return "—"
-
-    df_log["P&L (%)"] = df_log.apply(calc_pnl_str,axis=1)
-    df_log["Resolve"] = df_log.apply(lambda r: "🤖 Auto" if r.get("auto_resolved") else "✏️ Manual", axis=1)
-    df_log["Hit"]     = df_log["status"].map({"WIN":"✅ TP Hit","LOSS":"❌ SL Hit","OPEN":"⏳ Open","MANUAL":"📝 Manual"}).fillna("—")
-    df_log["Hold"]    = df_log.get("hold_days", 3)
-
-    show_cols=["date","ticker","signal","score","entry","sl","tp","Hold","exit_price","exit_date","P&L (%)","Hit","Resolve","status","note"]
-    exist_cols=[c for c in show_cols if c in df_log.columns]
-
-    def style_status(val):
-        if val=="WIN":  return "background-color:#004422;color:#00ff99"
-        if val=="LOSS": return "background-color:#3a0010;color:#ff4466"
-        if val=="OPEN": return "background-color:#001433;color:#44aaff"
-        return ""
-
-    styled_log=df_log[exist_cols].sort_values("date",ascending=False).style.map(style_status,subset=["status"])
-    st.dataframe(styled_log,use_container_width=True,hide_index=True)
-
-    # HAPUS + DOWNLOAD
-    with st.expander("🗑️ Hapus Trade dari Log",expanded=False):
-        all_ids=[f"{l['date']} — {l['ticker']} ({l['status']})" for l in logs]
-        del_idx=st.selectbox("Pilih trade:",range(len(all_ids)),format_func=lambda i:all_ids[i],key="del_trade_sel")
-        if st.button("🗑️ Hapus",key="del_trade_btn",type="secondary"):
-            del_id=logs[del_idx]["id"]
-            logs=[l for l in logs if l["id"]!=del_id]
-            save_trade_log(logs); st.success("Dihapus."); st.rerun()
-
-    dl1,dl2=st.columns(2)
-    with dl1:
-        st.download_button("⬇️ Download CSV",
-            pd.DataFrame(logs).to_csv(index=False).encode("utf-8"),
-            f"idx_trade_log_{datetime.now().strftime('%Y%m%d')}.csv","text/csv",use_container_width=True)
-    with dl2:
-        st.download_button("⬇️ Download JSON",
-            json.dumps(logs,indent=2,default=str).encode("utf-8"),
-            f"idx_trade_log_{datetime.now().strftime('%Y%m%d')}.json","application/json",use_container_width=True)
+    # Download
+    st.download_button("⬇️ Download CSV", pd.DataFrame(logs).to_csv(index=False).encode("utf-8"), "idx_log.csv")
