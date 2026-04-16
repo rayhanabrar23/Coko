@@ -179,6 +179,15 @@ def safe_float(val, default=0.0):
         return default if (np.isnan(v) or np.isinf(v)) else v
     except: return default
 
+def calc_sr(df):
+    if len(df) < 20:
+        return [], []
+    hh = df['high'].rolling(5, center=True).max()
+    ll = df['low'].rolling(5, center=True).min()
+    res = sorted(df[df['high'] == hh]['high'].dropna().unique(), reverse=True)[:3]
+    sup = sorted(df[df['low'] == ll]['low'].dropna().unique())[:3]
+    return list(res), list(sup)
+
 # ==================================================
 # TEKNIKAL LEVELS & INTERPRETASI GRAFIK
 # ==================================================
@@ -212,7 +221,6 @@ def get_support_resistance(df, n=10):
     return resistances, supports
 
 def detect_trend(df):
-    """Deteksi tren berdasarkan EMA20 slope dan posisi harga"""
     if len(df) < 20:
         return "Data tidak cukup"
     last = df.iloc[-1]
@@ -229,7 +237,6 @@ def detect_trend(df):
         return "SIDEWAYS (konsolidasi)"
 
 def detect_candlestick_pattern(df):
-    """Deteksi pola candlestick pada candle terakhir dan sebelumnya"""
     if len(df) < 3:
         return "—"
     o = df['open'].values
@@ -251,13 +258,11 @@ def detect_candlestick_pattern(df):
             patterns.append("✳️ Doji (indecision / reversal)")
         if body/range_candle > 0.85:
             patterns.append("💪 Marubozu (strong momentum)")
-    # Engulfing
     prev_body = abs(c[-2]-o[-2])
     if c[-2] < o[-2] and c[i] > o[i] and body > prev_body:
         patterns.append("🟢 Bullish Engulfing (reversal up)")
     if c[-2] > o[-2] and c[i] < o[i] and body > prev_body:
         patterns.append("🔴 Bearish Engulfing (reversal down)")
-    # Morning/Evening star
     if len(df)>=3:
         if c[-3] < o[-3] and abs(c[-2]-o[-2]) < 0.003*c[-2] and c[i] > o[i]:
             patterns.append("🌅 Morning Star (bullish reversal)")
@@ -266,15 +271,12 @@ def detect_candlestick_pattern(df):
     return patterns[0] if patterns else "Tidak ada pola signifikan"
 
 def detect_rsi_divergence(df):
-    """Deteksi divergence antara harga dan RSI (sederhana)"""
     if len(df) < 20:
         return None
     prices = df['close'].values
     rsi = df['rsi'].values
-    # Cek 5 candle terakhir
     last_price = prices[-1]
     last_rsi = rsi[-1]
-    # Cari swing low harga dan RSI
     price_lows = []
     rsi_lows = []
     for i in range(-10, -1):
@@ -282,10 +284,8 @@ def detect_rsi_divergence(df):
             price_lows.append((i, prices[i]))
             rsi_lows.append((i, rsi[i]))
     if len(price_lows) >= 2:
-        # Harga membuat lower low tapi RSI membuat higher low → bullish divergence
         if price_lows[-1][1] < price_lows[-2][1] and rsi_lows[-1][1] > rsi_lows[-2][1]:
             return "Bullish Divergence (harga turun, RSI naik) → potensi reversal naik"
-        # Harga membuat higher high tapi RSI membuat lower high → bearish divergence
         price_highs = []
         rsi_highs = []
         for i in range(-10, -1):
@@ -308,7 +308,6 @@ def detect_volume_surge(df, threshold=1.5):
     return f"Volume normal ({ratio:.1f}x)", False
 
 def detect_breakout(df, resistances, supports):
-    """Deteksi breakout di atas resistansi atau di bawah support"""
     last_close = df['close'].iloc[-1]
     last_high = df['high'].iloc[-1]
     last_low = df['low'].iloc[-1]
@@ -346,7 +345,6 @@ def get_technical_levels(df, score, mode="aggressive"):
     pivot, r1, r2, s1, s2 = get_pivot_points(df)
     resistances, supports = get_support_resistance(df, 10)
 
-    # Entry
     if close > ema20:
         entry = max(ema20, bb_lower)
         entry = min(close, entry * 1.01)
@@ -360,7 +358,6 @@ def get_technical_levels(df, score, mode="aggressive"):
     entry = max(entry, close * 0.97)
     entry = round(entry, 0)
 
-    # SL
     sl_candidates = [swing_low * 0.99, s1 * 0.99, s2 * 0.99, bb_lower * 0.98]
     sl_candidates = [s for s in sl_candidates if s > 0 and s < entry]
     if sl_candidates:
@@ -370,7 +367,6 @@ def get_technical_levels(df, score, mode="aggressive"):
     sl = max(sl, entry * 0.95)
     sl = round(sl, 0)
 
-    # TP
     risk = entry - sl
     if risk <= 0:
         risk = entry * 0.01
@@ -385,7 +381,6 @@ def get_technical_levels(df, score, mode="aggressive"):
     tp = round(tp, 0)
     rr = round((tp - entry) / (entry - sl), 2) if (entry - sl) > 0 else 0
 
-    # Signal
     if score >= 70 and close > ema20:
         signal = "⚡ STRONG BUY"
         sig_color = "#00ff99"
@@ -601,10 +596,9 @@ def run_parallel_scan(tickers, scan_params, max_workers=10, progress_placeholder
     return results, debug_log, errors
 
 # ==================================================
-# INTERPRETASI GRAFIK (baru)
+# INTERPRETASI GRAFIK
 # ==================================================
 def generate_chart_insights(df, ticker, entry, sl, tp, score, signal):
-    """Menghasilkan teks interpretasi berdasarkan data teknikal terbaru"""
     if df.empty:
         return "Data tidak cukup."
     last = df.iloc[-1]
@@ -659,7 +653,6 @@ def generate_chart_insights(df, ticker, entry, sl, tp, score, signal):
     elif breakout_down:
         insights.append("📉 **Breakdown support!** Harga jatuh di bawah support. Hindari beli.")
     
-    # Level support/resistance
     if supports:
         s_str = ", ".join([f"{int(s):,}" for s in supports[-2:]])
         insights.append(f"🟢 **Support terdekat:** {s_str}")
@@ -667,7 +660,6 @@ def generate_chart_insights(df, ticker, entry, sl, tp, score, signal):
         r_str = ", ".join([f"{int(r):,}" for r in resistances[:2]])
         insights.append(f"🔴 **Resistance terdekat:** {r_str}")
     
-    # Rekomendasi entry/SL/TP
     insights.append(f"💰 **Entry yang direkomendasikan:** {entry:,.0f}")
     insights.append(f"🛑 **Stop Loss:** {sl:,.0f} ({(entry-sl)/entry*100:.1f}% di bawah entry)")
     insights.append(f"🎯 **Take Profit:** {tp:,.0f} ({(tp-entry)/entry*100:.1f}% di atas entry)")
@@ -677,7 +669,7 @@ def generate_chart_insights(df, ticker, entry, sl, tp, score, signal):
     return insights
 
 # ==================================================
-# WIN/LOSS TRACKER (sama seperti sebelumnya, dipotong agar tidak terlalu panjang)
+# WIN/LOSS TRACKER
 # ==================================================
 TRACKER_FILE = Path("idx_trade_log.json")
 TZ_JKT = pytz.timezone("Asia/Jakarta")
@@ -890,7 +882,7 @@ if target:
             e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
             pats=detect_patterns(df)
             vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
-            res,sup=calc_sr(df)
+            res,sup = calc_sr(df)
             
             # Interpretasi grafik
             insights = generate_chart_insights(df, target, entry, sl, tp, score, signal)
@@ -908,7 +900,7 @@ if target:
             insight_html = "<div class='insight-box'>" + "<br>".join(insights) + "</div>"
             st.markdown(insight_html, unsafe_allow_html=True)
             
-            # Chart (sama seperti sebelumnya, ditambahkan anotasi S/R)
+            # Chart dengan anotasi S/R
             fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.55,0.25,0.20], vertical_spacing=0.04)
             fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'],
                                          increasing_line_color='#00ff99', decreasing_line_color='#ff4466'), row=1, col=1)
@@ -943,7 +935,7 @@ if target:
 st.divider()
 
 # ==================================================
-# SMART SCANNER (sama seperti sebelumnya, dipotong)
+# SMART SCANNER (ringkas)
 # ==================================================
 st.subheader("🎯 Smart Scanner — Pilih Universe & Hold Period")
 sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
