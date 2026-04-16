@@ -477,7 +477,7 @@ def save_scan_results_to_log(df_results: pd.DataFrame, scan_date_str: str):
     new_entries = 0
     for _, row in df_results.head(10).iterrows():
         key = (scan_date_str, row["Ticker"])
-        if key in existing_keys: 
+        if key in existing_keys:
             continue
         logs.append({
             "id": f"{scan_date_str}_{row['Ticker']}",
@@ -491,4 +491,773 @@ def save_scan_results_to_log(df_results: pd.DataFrame, scan_date_str: str):
             "rr": str(row["R:R"]),
             "pattern": row.get("Pattern", "—"),
             "note": "",
-            "status": "OPEN",
+            "status": "OPEN"
+        })
+        new_entries += 1
+    save_trade_log(logs)
+    return new_entries
+
+def check_trade_status(ticker: str, entry: float, sl: float, tp: float, scan_date_str: str) -> dict:
+    """
+    Fetch OHLC dari tanggal scan sampai hari ini.
+    Cek candle per candle apakah SL/TP kena, juga cek auto close setelah 3 hari.
+    """
+    ticker_jk = ticker + ".JK"
+    try:
+        scan_dt = date.fromisoformat(scan_date_str)
+        today = datetime.now(TZ_JKT).date()
+        start_dt = (scan_dt - timedelta(days=1)).isoformat()
+        end_dt = today.isoformat()
+
+        hist = clean_df(yf.download(ticker_jk, start=start_dt, end=end_dt, progress=False))
+        if hist.empty:
+            return _no_data_result(entry, sl, tp)
+
+        hist_from = hist[hist.index.date >= scan_dt]
+        if hist_from.empty:
+            return _no_data_result(entry, sl, tp)
+
+        # Cek apakah sudah lebih dari 3 hari (termasuk hari scan)
+        days_held = (today - scan_dt).days
+        auto_close = days_held >= 3
+
+        # Cek TP/SL per candle
+        hit_tp = hit_sl = False
+        hit_price = hit_date = None
+        for dt_idx, candle in hist_from.iterrows():
+            hi = safe_float(candle['high']); lo = safe_float(candle['low'])
+            if hi >= tp and not hit_tp and not hit_sl:
+                hit_tp = True; hit_price = tp; hit_date = str(dt_idx.date()); break
+            if lo <= sl and not hit_tp and not hit_sl:
+                hit_sl = True; hit_price = sl; hit_date = str(dt_idx.date()); break
+
+        # Harga penutupan terakhir
+        last_row = hist_from.iloc[-1]
+        current = safe_float(last_row['close'])
+        last_date = str(hist_from.index[-1].date())
+        pct_change = (current - entry) / entry * 100 if entry > 0 else 0
+
+        # Jika auto close dan belum TP/SL
+        if auto_close and not hit_tp and not hit_sl:
+            return {
+                "status": "CLOSED (3 HARI) ⏰",
+                "current": current,
+                "pct": pct_change,
+                "last_date": last_date,
+                "color": "#ffaa44",
+                "emoji": "⏰",
+                "rec_action": "POSISI DITUTUP OTOMATIS",
+                "rec_color": "#ffaa44",
+                "reason": f"Sudah {days_held} hari sejak rekomendasi. Belum mencapai TP/SL, maka posisi ditutup otomatis di harga {fmt_price(current)} dengan {pct_change:+.1f}%.",
+                "pct_to_tp": 0, "pct_to_sl": 0,
+                "curr_hi": safe_float(last_row['high']), "curr_lo": safe_float(last_row['low'])
+            }
+
+        if hit_tp:
+            pct_tp = (tp - entry) / entry * 100
+            return {
+                "status": "TP HIT ✅",
+                "current": tp,
+                "pct": pct_tp,
+                "last_date": hit_date,
+                "color": "#00ff99",
+                "emoji": "✅",
+                "rec_action": "PROFIT TEREALISASI",
+                "rec_color": "#00ff99",
+                "reason": f"Target profit tercapai pada {hit_date}. High candle menyentuh TP {fmt_price(tp)} — gain {pct_tp:.1f}%.",
+                "pct_to_tp": 100, "pct_to_sl": 0,
+                "curr_hi": safe_float(last_row['high']), "curr_lo": safe_float(last_row['low'])
+            }
+        if hit_sl:
+            pct_sl = (sl - entry) / entry * 100
+            return {
+                "status": "SL HIT ❌",
+                "current": sl,
+                "pct": pct_sl,
+                "last_date": hit_date,
+                "color": "#ff4466",
+                "emoji": "❌",
+                "rec_action": "STOP LOSS AKTIF",
+                "rec_color": "#ff4466",
+                "reason": f"Stop loss terkena pada {hit_date}. Low candle menyentuh SL {fmt_price(sl)} — loss {abs(pct_sl):.1f}%.",
+                "pct_to_tp": 0, "pct_to_sl": 100,
+                "curr_hi": safe_float(last_row['high']), "curr_lo": safe_float(last_row['low'])
+            }
+
+        # Posisi masih open
+        pct_to_tp = (current - entry) / (tp - entry) * 100 if (tp - entry) > 0 else 0
+        pct_to_sl = (entry - current) / (entry - sl) * 100 if (entry - sl) > 0 else 0
+        status_label = _status_label(pct_change, pct_to_tp, pct_to_sl)
+        status_color = ("#00ff99" if pct_change>1 else
+                        ("#44dd88" if pct_change>0 else
+                         ("#ff8844" if pct_to_sl>50 else "#ffcc00")))
+        rec_action, rec_color, reason = _generate_recommendation(
+            entry, sl, tp, current, pct_change, pct_to_tp, pct_to_sl,
+            safe_float(last_row['high']), safe_float(last_row['low']), scan_date_str, today
+        )
+        return {
+            "status": status_label,
+            "current": current,
+            "pct": pct_change,
+            "last_date": last_date,
+            "color": status_color,
+            "emoji": "📈" if pct_change>=0 else "📉",
+            "rec_action": rec_action,
+            "rec_color": rec_color,
+            "reason": reason,
+            "pct_to_tp": pct_to_tp,
+            "pct_to_sl": pct_to_sl,
+            "curr_hi": safe_float(last_row['high']), "curr_lo": safe_float(last_row['low'])
+        }
+    except Exception as e:
+        return _no_data_result(entry, sl, tp, str(e))
+
+def _no_data_result(entry, sl, tp, msg="Data tidak tersedia"):
+    return {
+        "status":"NO DATA","current":entry,"pct":0,"last_date":"—",
+        "color":"#445566","emoji":"❓","rec_action":"CARI DATA MANUAL",
+        "rec_color":"#445566","reason":msg,"pct_to_tp":0,"pct_to_sl":0,
+        "curr_hi":entry,"curr_lo":entry,
+    }
+
+def _status_label(pct, pct_to_tp, pct_to_sl):
+    if pct >= 0:
+        if pct_to_tp >= 80: return f"HAMPIR TP ({pct:+.1f}%) 🎯"
+        if pct_to_tp >= 50: return f"PROFIT BAGUS ({pct:+.1f}%) 💰"
+        return f"UNTUNG {pct:+.1f}% ✊"
+    else:
+        if pct_to_sl >= 80: return f"HAMPIR SL ({pct:.1f}%) ⚠️"
+        if pct_to_sl >= 50: return f"MELEMAH ({pct:.1f}%) 😟"
+        return f"TURUN {pct:.1f}% 👀"
+
+def _generate_recommendation(entry, sl, tp, current, pct, pct_to_tp, pct_to_sl,
+                              curr_hi, curr_lo, scan_date_str, today):
+    days_held = (today - date.fromisoformat(scan_date_str)).days
+    days_note = f" (sudah {days_held} hari)" if days_held > 0 else " (hari pertama)"
+
+    if pct >= 0:
+        if pct_to_tp >= 80:
+            return ("AMBIL TP SEKARANG", "#00ff99",
+                    f"Harga sudah {pct_to_tp:.0f}% dari jarak entry→TP{days_note}. "
+                    f"Pertimbangkan ambil profit penuh atau minimal partial 50% dan naikkan SL ke entry (breakeven). "
+                    f"Jangan biarkan profit besar berubah jadi loss.")
+        elif pct_to_tp >= 50:
+            return ("PARTIAL TP + NAIKKAN SL", "#44dd88",
+                    f"Profit {pct:.1f}%, sudah {pct_to_tp:.0f}% menuju target{days_note}. "
+                    f"Disarankan: ambil profit 30–50%, geser SL ke harga entry (breakeven) untuk lock profit. "
+                    f"Biarkan sisanya berjalan menuju TP {fmt_price(tp)}.")
+        elif days_held >= 3 and pct > 0:
+            return ("EVALUASI EXIT", "#ffcc00",
+                    f"Sudah {days_held} hari, posisi profit {pct:.1f}% tapi masih jauh dari TP. "
+                    f"Jika tidak ada momentum baru, pertimbangkan exit di harga saat ini dan alihkan ke setup lebih segar.")
+        else:
+            return ("HOLD — SESUAI RENCANA", "#ffcc00",
+                    f"Posisi menguntungkan {pct:.1f}%{days_note}. Hold dengan SL di {fmt_price(sl)}. "
+                    f"Target TP {fmt_price(tp)} ({((tp-current)/current*100):.1f}% lagi). "
+                    f"Jangan pindahkan SL ke bawah entry.")
+    else:
+        if pct_to_sl >= 80:
+            return ("CUT LOSS SEKARANG", "#ff4466",
+                    f"Harga sudah {pct_to_sl:.0f}% mendekati SL{days_note}. "
+                    f"Disarankan CUT LOSS sekarang di {fmt_price(current)} meskipun belum menyentuh SL {fmt_price(sl)}. "
+                    f"Mencegah kerugian lebih besar lebih penting dari berharap reversal.")
+        elif pct_to_sl >= 50:
+            return ("WASPADA — SIAP CUT", "#ff8844",
+                    f"Turun {abs(pct):.1f}%, sudah {pct_to_sl:.0f}% menuju SL{days_note}. "
+                    f"Monitor ketat candle berikutnya. Jika candle bearish konfirmasi atau volume turun besar, "
+                    f"eksekusi cut loss di {fmt_price(current)} tanpa tunggu SL {fmt_price(sl)} kena.")
+        elif days_held >= 3 and pct < -1:
+            return ("EVALUASI ULANG", "#ff8844",
+                    f"Sudah {days_held} hari, posisi masih minus {abs(pct):.1f}%. "
+                    f"Pertimbangkan cut loss jika tidak ada sinyal recovery (cek MACD, RSI, dan volume). "
+                    f"Modal yang dilepas bisa diputar ke setup lebih bagus.")
+        else:
+            return ("HOLD — DALAM TOLERANSI", "#ffcc00",
+                    f"Turun {abs(pct):.1f}%{days_note}, masih jauh dari SL {fmt_price(sl)} "
+                    f"({(100-pct_to_sl):.0f}% margin tersisa). "
+                    f"Hold sesuai rencana. SL adalah batas terakhir — jangan dipindah lebih rendah.")
+
+# ── HEADER ────────────────────────────────────────────────────────────────────
+
+st.markdown("""
+<h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
+⚡ IDX TERMINAL v5 — SMART SCANNER
+</h1>
+<p style='text-align:center;color:#445566;font-family:monospace;'>
+Multi-Factor Daily Trade Analyzer · IDX30 / LQ45 / IDX80 / Growth30 · Top 10 Rekomendasi Harian · Trade Tracker
+</p>
+""", unsafe_allow_html=True)
+st.divider()
+
+# ── MARKET PULSE ──────────────────────────────────────────────────────────────
+col_ihsg, col_sector = st.columns([1,1])
+ihsg_df = pd.DataFrame(); ihsg_change = 0.0
+
+with col_ihsg:
+    st.subheader("📈 IHSG Market Pulse")
+    raw = yf.download("^JKSE", period="1y", progress=False); ihsg_df = clean_df(raw)
+    if not ihsg_df.empty:
+        ihsg_change = ((ihsg_df['close'].iloc[-1]-ihsg_df['close'].iloc[-2])/ihsg_df['close'].iloc[-2])*100
+        ihsg_df['ma20'] = ihsg_df['close'].rolling(20).mean()
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=ihsg_df.index, y=ihsg_df['close'], fill='tozeroy',
+                                 line_color='#00bbff', fillcolor='rgba(0,187,255,0.07)', name='IHSG'))
+        fig.add_trace(go.Scatter(x=ihsg_df.index, y=ihsg_df['ma20'],
+                                 line=dict(color='orange',width=1.5,dash='dot'), name='MA20'))
+        fig.update_layout(height=230, template='plotly_dark', margin=dict(l=0,r=0,t=0,b=0),
+                          showlegend=False, xaxis_rangeslider_visible=False)
+        st.plotly_chart(fig, use_container_width=True)
+        ca,cb,cc,cd = st.columns(4)
+        ca.metric("Last",       fmt_price(ihsg_df['close'].iloc[-1]))
+        cb.metric("Change",     fmt_pct(ihsg_change))
+        cc.metric("52W High",   fmt_price(ihsg_df['high'].max()))
+        cd.metric("52W Low",    fmt_price(ihsg_df['low'].min()))
+
+with col_sector:
+    st.subheader("🗺️ Sectoral Heatmap (5D)")
+    sec_data = []
+    for s,t in SECTOR_PROXY.items():
+        try:
+            d = clean_df(yf.download(f"{t}.JK", period="10d", progress=False))
+            if not d.empty and len(d)>=5:
+                perf = ((d['close'].iloc[-1]-d['close'].iloc[-5])/d['close'].iloc[-5])*100
+                sec_data.append({"Sektor":s,"Perf":round(safe_float(perf),1),"Parent":"IDX","Size":10})
+        except: continue
+    if sec_data:
+        df_s = pd.DataFrame(sec_data)
+        fig = px.treemap(df_s, path=['Parent','Sektor'], values='Size', color='Perf',
+                         color_continuous_scale='RdYlGn', range_color=[-3,3])
+        fig.update_layout(height=230, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark')
+        st.plotly_chart(fig, use_container_width=True)
+        best=max(sec_data,key=lambda x:x['Perf']); worst=min(sec_data,key=lambda x:x['Perf'])
+        bias = "🟢 BULLISH" if ihsg_change>0.3 else ("🔴 BEARISH" if ihsg_change<-0.3 else "🟡 SIDEWAYS")
+        st.caption(f"Bias: **{bias}** | 🏆 {best['Sektor']} ({best['Perf']:+.1f}%) | ⚠️ {worst['Sektor']} ({worst['Perf']:+.1f}%)")
+
+st.divider()
+
+# ── DEEP ANALYSIS ─────────────────────────────────────────────────────────────
+st.subheader("🔬 Deep Analysis — Single Ticker")
+inp1,inp2,inp3 = st.columns([1,2,1])
+with inp1: manual = st.text_input("🔍 Kode (contoh: BBRI)","").upper()
+with inp2: sec_sel = st.selectbox("📂 Pilih Sektor:",["—"]+list(MANUAL_SECTORS.keys()))
+with inp3: tf = st.selectbox("📅 Timeframe:",["6mo","1y","2y"],index=1)
+
+target = None
+if manual:
+    target = manual if manual.endswith(".JK") else f"{manual}.JK"
+elif sec_sel != "—":
+    pick = st.selectbox("Pilih Saham:", add_jk(MANUAL_SECTORS[sec_sel]))
+    target = pick
+
+if target:
+    with st.spinner(f"Menganalisis {target}..."):
+        df = analyze_full(target, period=tf)
+    if df is not None:
+        score,detail = score_ticker(df)
+        signal,sig_color,sl,tp,rr = get_signal(df, score)
+        l = df.iloc[-1]
+        pats = detect_patterns(df)
+        vr,vlbl,vsurge_light,vsurge_strong = volume_analysis(df)
+        res,sup = calc_sr(df)
+        cl=safe_float(l['close']); rsi=safe_float(l['rsi'])
+        e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
+        atr=safe_float(l['atr']); macd=safe_float(l['macd']); sig_v=safe_float(l['sig'])
+
+        sc  = "score-high" if score>=65 else ("score-mid" if score>=45 else "score-low")
+        tag = ("tag-sbuy" if "STRONG" in signal else
+               ("tag-buy" if "BUY" in signal else
+                ("tag-sell" if "SELL" in signal or "WEAK" in signal else "tag-hold")))
+
+        st.markdown(f"### {target.replace('.JK','')}")
+        c1,c2,c3,c4,c5 = st.columns(5)
+        with c1:
+            st.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>CONFLUENCE SCORE</div><div class='{sc}'>{score}/100</div></div>",unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"<div class='metric-card'><div style='color:#556;font-size:11px'>SIGNAL</div><div style='margin-top:8px'><span class='{tag}'>{signal}</span></div></div>",unsafe_allow_html=True)
+        with c3: st.metric("RSI (14)", f"{rsi:.0f}", delta="Oversold" if rsi<35 else ("Overbought" if rsi>72 else "Normal"))
+        with c4: st.metric("Volume", vlbl)
+        with c5: st.metric("ATR", fmt_price(atr))
+
+        d1,d2,d3,d4,d5 = st.columns(5)
+        d1.error(  f"❌ SL: {fmt_price(sl)}")
+        d2.success(f"✅ TP: {fmt_price(tp)}")
+        d3.info(   f"⚖️ R:R = 1:{rr}")
+        gap=(cl-e20)/e20*100 if e20 else 0
+        d4.metric("vs EMA20", f"{gap:+.1f}%")
+        d5.metric("MACD","Bullish ↑" if macd>sig_v else "Bearish ↓")
+
+        left,mid,right = st.columns(3)
+        with left:
+            st.markdown("**📊 Score Breakdown**")
+            sdf = pd.DataFrame(list(detail.items()), columns=["Factor","Score"])
+            sdf["Max"] = [25,25,20,15,15]
+            fig_s = go.Figure(go.Bar(x=sdf["Score"], y=sdf["Factor"], orientation='h',
+                marker_color=['#00ff99' if s/m>=0.7 else ('#ffcc00' if s/m>=0.4 else '#ff4466')
+                              for s,m in zip(sdf["Score"],sdf["Max"])],
+                text=sdf["Score"], textposition='auto'))
+            fig_s.update_layout(height=200,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),xaxis=dict(range=[0,25]))
+            st.plotly_chart(fig_s, use_container_width=True)
+        with mid:
+            st.markdown("**🕯️ Patterns**")
+            for p in pats: st.write(p)
+            st.markdown("**📐 S/R Levels**")
+            if res: st.markdown(f"🔴 R: {' | '.join([fmt_price(r) for r in res[:2]])}")
+            if sup: st.markdown(f"🟢 S: {' | '.join([fmt_price(s) for s in sup[:2]])}")
+        with right:
+            st.markdown("**💡 Trade Setup**")
+            lot10 = 10_000_000/cl/100 if cl>0 else 0
+            st.markdown(f"""
+            - 💰 **Entry:** {fmt_price(cl)} – {fmt_price(cl*1.005)}
+            - ❌ **Max Loss/lot:** Rp {fmt_price((cl-sl)*100)}
+            - ✅ **Target/lot:** Rp {fmt_price((tp-cl)*100)}
+            - 📦 **Est. lot (10jt):** {lot10:.0f} lot
+            - ⏱️ **Hold:** 1–3 hari
+            """)
+
+        interp_html,_,_ = interpret_analysis(target, score, detail, signal, df, sl, tp, rr,
+                                              pats, vr, vsurge_light, vsurge_strong, ihsg_change)
+        st.markdown(interp_html, unsafe_allow_html=True)
+
+        fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.55,0.25,0.20],
+                            vertical_spacing=0.04, subplot_titles=("Price + Indicators","MACD","RSI + Volume"))
+        fig.add_trace(go.Candlestick(x=df.index,open=df['open'],high=df['high'],low=df['low'],close=df['close'],
+                                     increasing_line_color='#00ff99',decreasing_line_color='#ff4466',name='Price'),row=1,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['ema20'],line=dict(color='orange',width=1.8),name='EMA20'),row=1,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['ema50'],line=dict(color='#00aaff',width=1.2,dash='dot'),name='EMA50'),row=1,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['bb_u'],line=dict(color='rgba(180,180,255,0.35)',width=1),name='BB',showlegend=False),row=1,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['bb_l'],fill='tonexty',fillcolor='rgba(80,80,255,0.04)',
+                                  line=dict(color='rgba(180,180,255,0.35)',width=1),showlegend=False),row=1,col=1)
+        fig.add_hline(y=sl,line_dash="dash",line_color="#ff4466",annotation_text=f"SL {fmt_price(sl)}",row=1,col=1)
+        fig.add_hline(y=tp,line_dash="dash",line_color="#00ff99",annotation_text=f"TP {fmt_price(tp)}",row=1,col=1)
+        hc = ['#00ff99' if v>=0 else '#ff4466' for v in df['hist'].fillna(0)]
+        fig.add_trace(go.Bar(x=df.index,y=df['hist'],marker_color=hc,name='Hist',showlegend=False),row=2,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['macd'],line=dict(color='#00bbff',width=1.5),name='MACD'),row=2,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['sig'],line=dict(color='orange',width=1.5),name='Signal'),row=2,col=1)
+        fig.add_trace(go.Scatter(x=df.index,y=df['rsi'],line=dict(color='#bb77ff',width=1.5),name='RSI'),row=3,col=1)
+        fig.add_hline(y=72,line_dash="dot",line_color="red",annotation_text="OB(72)",row=3,col=1)
+        fig.add_hline(y=30,line_dash="dot",line_color="green",annotation_text="OS(30)",row=3,col=1)
+        fig.add_hrect(y0=55,y1=72,fillcolor="rgba(0,255,150,0.05)",line_width=0,row=3,col=1)
+        vc = ['#00ff99' if c>=o else '#ff4466' for c,o in zip(df['close'],df['open'])]
+        fig.add_trace(go.Bar(x=df.index,y=df['volume']/df['volume'].max()*30,marker_color=vc,
+                              opacity=0.35,showlegend=False),row=3,col=1)
+        fig.update_layout(height=680,template='plotly_dark',xaxis_rangeslider_visible=False,
+                          legend=dict(orientation='h',y=1.02),margin=dict(l=0,r=0,t=30,b=0))
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.warning(f"Data tidak cukup untuk {target}.")
+
+st.divider()
+
+# ── SMART SCANNER ─────────────────────────────────────────────────────────────
+st.subheader("🎯 Smart Scanner — Top 10 Rekomendasi Harian")
+
+sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
+with sc1: idx_choice = st.selectbox("📊 Universe:", list(INDEX_UNIVERSE.keys()))
+with sc2: also_sector = st.multiselect("➕ Tambah Sektor:", list(MANUAL_SECTORS.keys()))
+with sc3: min_score = st.slider("Min Score:", 0, 100, 55)
+with sc4:
+    now_jkt    = datetime.now(TZ_JKT).date()
+    scan_date  = st.date_input("📅 Tanggal Scan:", value=now_jkt, max_value=now_jkt)
+
+selected_universe = INDEX_UNIVERSE[idx_choice]
+extra_from_sector = []
+for sec in also_sector: extra_from_sector.extend(MANUAL_SECTORS[sec])
+combined_universe = list(dict.fromkeys(selected_universe + extra_from_sector))
+
+st.markdown(f"**Universe aktif: {len(combined_universe)} saham** · Hasil disimpan sebagai tanggal **{scan_date}** · Top 10 terbaik")
+
+with st.expander("⚙️ Filter Tambahan", expanded=False):
+    fc1,fc2,fc3 = st.columns(3)
+    with fc1:
+        min_vol_ratio   = st.slider("Min Volume Ratio:", 0.5, 3.0, 1.0, 0.1)
+        require_surge   = st.checkbox("Wajib Volume Surge (🔥 ≥1.5x)", value=False)
+    with fc2:
+        min_rsi = st.slider("RSI Min:", 10, 50, 30)
+        max_rsi = st.slider("RSI Max:", 50, 90, 70)
+    with fc3:
+        require_macd_bull  = st.checkbox("Wajib MACD Bullish", value=False)
+        require_above_ema  = st.checkbox("Wajib Price > EMA20", value=True)
+        signal_filter      = st.selectbox("Filter Signal:", ["Semua BUY","Strong BUY Only","Semua (incl HOLD)"])
+
+if st.button("🚀 MULAI SCAN SEKARANG", use_container_width=True, type="primary"):
+    tickers_to_scan = add_jk(combined_universe)
+    prog   = st.progress(0); status = st.empty()
+    t_start = time.time()
+
+    scan_params = (min_score, signal_filter, require_above_ema,
+                   min_vol_ratio, require_surge, require_macd_bull, min_rsi, max_rsi)
+
+    results = run_parallel_scan(tickers_to_scan, scan_params, max_workers=12,
+                                progress_placeholder=prog, status_placeholder=status)
+    elapsed = time.time() - t_start
+    prog.empty(); status.empty()
+    st.caption(f"⏱️ Selesai dalam **{elapsed:.0f} detik** | {len(tickers_to_scan)} ticker discan")
+
+    if results:
+        df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(10)
+
+        def color_score(val):
+            if val>=70: return 'background-color:#004422;color:#00ff99'
+            elif val>=55: return 'background-color:#332200;color:#ffcc00'
+            else: return 'background-color:#2a0010;color:#ff8888'
+
+        display_cols = ["Ticker","Score","Signal","Price","RSI","Vol","MACD","EMA20","SL","TP","R:R","Pattern"]
+        df_display = df_res[display_cols].copy()
+        df_display["Price"] = df_display["Price"].apply(lambda x: fmt_price(x))
+        df_display["SL"]    = df_display["SL"].apply(lambda x: fmt_price(x))
+        df_display["TP"]    = df_display["TP"].apply(lambda x: fmt_price(x))
+        df_display["RSI"]   = df_display["RSI"].apply(lambda x: f"{x:.0f}")
+
+        styled = df_display.style.map(color_score, subset=['Score'])
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+        st.success(f"✅ **{len(df_res)} kandidat terbaik** dari {len(tickers_to_scan)} saham")
+
+        # Auto-save ke tracker
+        n_saved = save_scan_results_to_log(df_res, str(scan_date))
+        if n_saved>0:
+            st.info(f"💾 **{n_saved} rekomendasi** disimpan ke tracker untuk tanggal {scan_date}.")
+        else:
+            st.caption(f"ℹ️ Ticker hari {scan_date} sudah tercatat di tracker sebelumnya.")
+
+        # Top 3 detail
+        st.markdown("### 🏆 Top 3 Setup Terbaik")
+        for i,(_, row) in enumerate(df_res.head(3).iterrows()):
+            medal = ["🥇","🥈","🥉"][i]
+            sc2 = "score-high" if row['Score']>=65 else "score-mid"
+            tg  = "tag-sbuy"  if "STRONG" in row['Signal'] else "tag-buy"
+            try:
+                df_top = analyze_full(f"{row['Ticker']}.JK", period="6mo")
+                if df_top is not None:
+                    sc_v2,det_v2  = score_ticker(df_top)
+                    sig_v2,_,sl_v2,tp_v2,rr_v2 = get_signal(df_top, sc_v2)
+                    pats_v2  = detect_patterns(df_top)
+                    vr_v2,_,vsl_v2,vss_v2 = volume_analysis(df_top)
+                    full_html,_,_ = interpret_analysis(f"{row['Ticker']}.JK", sc_v2, det_v2, sig_v2,
+                                                       df_top, sl_v2, tp_v2, rr_v2, pats_v2, vr_v2, vsl_v2, vss_v2, ihsg_change)
+                else:
+                    full_html = "<p style='color:#556'>Interpretasi tidak tersedia.</p>"
+            except:
+                full_html = "<p style='color:#556'>Interpretasi tidak tersedia.</p>"
+
+            with st.expander(f"{medal} #{i+1} {row['Ticker']} — Score {row['Score']}/100 | {row['Signal']} | Rp {fmt_price(row['Price'])}", expanded=(i==0)):
+                col_a, col_b = st.columns([1, 2])
+                with col_a:
+                    st.markdown(f"""
+                    <div class='metric-card'>
+                        <div style='font-size:22px;font-weight:900;color:#00bbff'>{row['Ticker']}</div>
+                        <div class='{sc2}'>{row['Score']}/100</div>
+                        <div style='margin:8px 0'><span class='{tg}'>{row['Signal']}</span></div>
+                        <hr style='border-color:#1e3050'>
+                        <div style='font-size:12px;color:#778;text-align:left;line-height:2'>
+                        💰 Harga: <b>Rp {fmt_price(row['Price'])}</b><br>
+                        📊 RSI: <b>{row['RSI']}</b><br>
+                        📦 Volume: <b>{row['Vol']}</b><br>
+                        🕯️ Pattern: <b>{row['Pattern']}</b><br>
+                        <hr style='border-color:#1e3050;margin:4px 0'>
+                        ❌ SL: <span style='color:#ff6666'>{fmt_price(row['SL'])}</span><br>
+                        ✅ TP: <span style='color:#66ff99'>{fmt_price(row['TP'])}</span><br>
+                        ⚖️ R:R: <span style='color:#aaaaff'>{row['R:R']}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with col_b:
+                    st.markdown(full_html, unsafe_allow_html=True)
+
+        st.markdown("### 📊 Distribusi Score Top 10")
+        fig_dist = go.Figure()
+        fig_dist.add_trace(go.Bar(
+            x=df_res['Ticker'], y=df_res['Score'],
+            marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
+            text=df_res['Score'], textposition='outside'
+        ))
+        fig_dist.add_hline(y=70,line_dash="dot",line_color="#00ff99",annotation_text="Strong Buy Zone")
+        fig_dist.add_hline(y=55,line_dash="dot",line_color="#ffcc00",annotation_text="Buy Zone")
+        fig_dist.update_layout(height=280, template='plotly_dark', margin=dict(l=0,r=0,t=10,b=0),
+                               yaxis=dict(range=[0,105]), showlegend=False)
+        st.plotly_chart(fig_dist, use_container_width=True)
+    else:
+        st.warning("Tidak ada saham yang memenuhi kriteria. Coba turunkan min score.")
+
+st.divider()
+
+# ── TRADE TRACKER ─────────────────────────────────────────────────────────────
+st.subheader("📊 Trade Tracker — Pantau Rekomendasi Harian")
+
+logs = load_trade_log()
+
+# Toolbar atas: pilih tanggal + reset
+tb1, tb2, tb3 = st.columns([2, 1, 1])
+with tb1:
+    all_dates = sorted({r['date'] for r in logs}, reverse=True)
+    if all_dates:
+        sel_date = st.selectbox("📅 Pilih Tanggal Scan:", all_dates,
+                                format_func=lambda d: f"{d} ({sum(1 for r in logs if r['date']==d)} saham)")
+    else:
+        sel_date = None
+        st.info("📭 Belum ada data. Jalankan scanner dulu.")
+
+with tb2:
+    if st.button("🔄 Refresh Harga", help="Ambil ulang harga terkini dari yfinance", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
+with tb3:
+    if st.button("🗑️ Hapus Semua Log", type="secondary", use_container_width=True):
+        save_trade_log([])
+        st.success("Log dikosongkan.")
+        st.rerun()
+
+if not logs or not sel_date:
+    st.stop()
+
+# Ambil trades untuk tanggal yang dipilih
+day_trades = [r for r in logs if r['date'] == sel_date]
+if not day_trades:
+    st.warning(f"Tidak ada data untuk tanggal {sel_date}.")
+    st.stop()
+
+st.markdown(f"### 📅 Rekomendasi {sel_date} — {len(day_trades)} Saham")
+
+# Fetch semua status sekaligus
+with st.spinner("Mengambil harga terkini dari pasar..."):
+    status_results = {}
+    for trade in day_trades:
+        status_results[trade['ticker']] = check_trade_status(
+            trade['ticker'],
+            float(trade['entry']),
+            float(trade['sl']),
+            float(trade['tp']),
+            trade['date']
+        )
+
+# Summary bar
+total_tp   = sum(1 for s in status_results.values() if "TP HIT" in s['status'])
+total_sl   = sum(1 for s in status_results.values() if "SL HIT" in s['status'])
+total_close= sum(1 for s in status_results.values() if "CLOSED" in s['status'])
+total_open = sum(1 for s in status_results.values() if "HIT" not in s['status'] and "CLOSED" not in s['status'])
+avg_pct    = np.mean([s['pct'] for s in status_results.values()]) if status_results else 0
+
+sm1,sm2,sm3,sm4,sm5 = st.columns(5)
+sm1.metric("Total Rekomendasi", len(day_trades))
+sm2.metric("✅ TP Hit",   total_tp)
+sm3.metric("❌ SL Hit",   total_sl)
+sm4.metric("⏰ Auto Close", total_close)
+wr = round(total_tp/(total_tp+total_sl)*100,0) if (total_tp+total_sl)>0 else 0
+sm5.metric("Win Rate", f"{wr:.0f}%", delta=f"avg {avg_pct:+.1f}%")
+
+st.markdown("---")
+
+# Cards per saham
+for trade in day_trades:
+    ticker  = trade['ticker']
+    entry   = float(trade['entry'])
+    sl      = float(trade['sl'])
+    tp      = float(trade['tp'])
+    score   = int(trade['score'])
+    signal  = trade['signal']
+    pattern = trade.get('pattern', '—')
+    s       = status_results.get(ticker, _no_data_result(entry, sl, tp))
+
+    current   = s['current']
+    pct       = s['pct']
+    status_lbl= s['status']
+    status_clr= s['color']
+    rec_act   = s['rec_action']
+    rec_clr   = s['rec_color']
+    reason    = s['reason']
+    last_date = s.get('last_date','—')
+    pct_to_tp = s.get('pct_to_tp', 0)
+    pct_to_sl = s.get('pct_to_sl', 0)
+
+    # Progress bar visual
+    is_hit    = "HIT" in status_lbl or "CLOSED" in status_lbl
+    pct_gain  = (current-entry)/entry*100 if not is_hit else pct
+    tp_pct_abs= (tp-entry)/entry*100 if entry>0 else 0
+    sl_pct_abs= (entry-sl)/entry*100 if entry>0 else 0
+
+    # Warna kartu berdasarkan status
+    card_border = status_clr
+    pct_color   = "#00ff99" if pct>=0 else "#ff4466"
+
+    st.markdown(f"""
+    <div style='background:#0a1020;border:1px solid {card_border}44;border-left:4px solid {card_border};
+                border-radius:12px;padding:18px;margin:10px 0;'>
+      <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;'>
+
+        <!-- KIRI: Info Saham -->
+        <div style='min-width:130px'>
+          <div style='font-size:22px;font-weight:900;color:#00bbff'>{ticker}</div>
+          <div style='font-size:11px;color:#556;margin-top:2px'>Score: {score}/100 &nbsp;|&nbsp; {signal.split()[0]}</div>
+          <div style='font-size:11px;color:#445;margin-top:2px'>🕯️ {pattern}</div>
+        </div>
+
+        <!-- TENGAH: Harga -->
+        <div style='min-width:200px'>
+          <div style='font-size:12px;color:#556;margin-bottom:4px'>HARGA</div>
+          <div style='display:flex;gap:16px;flex-wrap:wrap'>
+            <div><div style='font-size:10px;color:#445'>Entry</div>
+                 <div style='font-size:14px;font-weight:700;color:#aac'>Rp {fmt_price(entry)}</div></div>
+            <div><div style='font-size:10px;color:#445'>Sekarang ({last_date})</div>
+                 <div style='font-size:16px;font-weight:900;color:{pct_color}'>Rp {fmt_price(current)}</div></div>
+            <div><div style='font-size:10px;color:#445'>% Change</div>
+                 <div style='font-size:16px;font-weight:900;color:{pct_color}'>{pct:+.1f}%</div></div>
+          </div>
+          <div style='display:flex;gap:12px;margin-top:8px'>
+            <div><div style='font-size:10px;color:#ff6666'>SL {fmt_price(sl)}</div></div>
+            <div><div style='font-size:10px;color:#66ff99'>TP {fmt_price(tp)}</div></div>
+            <div><div style='font-size:10px;color:#aac'>R:R {trade.get("rr","—")}</div></div>
+          </div>
+        </div>
+
+        <!-- KANAN: Status & Rekomendasi -->
+        <div style='min-width:260px;flex:1'>
+          <div style='font-size:11px;color:{status_clr};font-weight:700;margin-bottom:4px'>{status_lbl}</div>
+          <div style='background:{rec_clr}22;border:1px solid {rec_clr}44;border-radius:8px;padding:8px 12px;'>
+            <div style='font-size:13px;font-weight:900;color:{rec_clr};margin-bottom:4px'>{rec_act}</div>
+            <div style='font-size:12px;color:#bbc;line-height:1.6'>{reason}</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Progress bar TP/SL -->
+      <div style='margin-top:12px;'>
+        <div style='display:flex;justify-content:space-between;font-size:10px;color:#445;margin-bottom:3px'>
+          <span>SL {fmt_price(sl)} (−{sl_pct_abs:.1f}%)</span>
+          <span>Entry {fmt_price(entry)}</span>
+          <span>TP {fmt_price(tp)} (+{tp_pct_abs:.1f}%)</span>
+        </div>
+        <div style='background:#1a2030;border-radius:4px;height:8px;position:relative;overflow:hidden'>
+          <div style="position:absolute;left:0;top:0;height:100%;width:{max(0,min(100,50+pct/tp_pct_abs*50 if tp_pct_abs>0 else 50))}%;background:{pct_color};border-radius:4px;transition:width 0.5s;"></div>
+        </div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.divider()
+
+# ── RINGKASAN P&L HARIAN ──────────────────────────────────────────────────────
+st.markdown("### 📈 Ringkasan Performa Semua Tanggal")
+
+if len(all_dates) > 0:
+    summary_rows = []
+    for d in all_dates:
+        d_trades = [r for r in logs if r['date']==d]
+        n_tp = n_sl = n_close = n_open = 0
+        pct_sum = 0.0
+        n_calc = 0
+        for t in d_trades:
+            s = check_trade_status(t['ticker'], float(t['entry']), float(t['sl']), float(t['tp']), t['date'])
+            if "TP HIT" in s['status']:   n_tp += 1
+            elif "SL HIT" in s['status']: n_sl += 1
+            elif "CLOSED" in s['status']: n_close += 1
+            else:                         n_open += 1
+            pct_sum += s['pct']
+            n_calc += 1
+        avg_p = pct_sum / n_calc if n_calc > 0 else 0
+        wr_d = round(n_tp/(n_tp+n_sl)*100, 0) if (n_tp+n_sl) > 0 else None
+        summary_rows.append({
+            "Tanggal": d,
+            "Saham": len(d_trades),
+            "✅ TP": n_tp,
+            "❌ SL": n_sl,
+            "⏰ Close": n_close,
+            "⏳ Open": n_open,
+            "Win Rate": f"{wr_d:.0f}%" if wr_d is not None else "—",
+            "Avg P&L": f"{avg_p:+.1f}%",
+        })
+    df_summary = pd.DataFrame(summary_rows)
+
+    def color_wr(val):
+        if val == "—": return ""
+        try:
+            v = float(val.replace("%",""))
+            if v>=60: return "color:#00ff99;font-weight:bold"
+            elif v>=45: return "color:#ffcc00"
+            return "color:#ff4466"
+        except: return ""
+
+    def color_pnl(val):
+        try:
+            v = float(val.replace("%","").replace("+",""))
+            return "color:#00ff99" if v>0 else "color:#ff4466"
+        except: return ""
+
+    styled_sum = df_summary.style.map(color_wr, subset=["Win Rate"]).map(color_pnl, subset=["Avg P&L"])
+    st.dataframe(styled_sum, use_container_width=True, hide_index=True)
+
+st.divider()
+
+# ── TAMBAH + HAPUS MANUAL ──────────────────────────────────────────────────────
+col_add, col_del = st.columns(2)
+
+with col_add:
+    with st.expander("➕ Tambah Trade Manual", expanded=False):
+        tm1,tm2 = st.columns(2)
+        with tm1:
+            m_ticker = st.text_input("Kode:", key="m_ticker").upper()
+            m_signal = st.selectbox("Signal:", ["⚡ STRONG BUY","✅ BUY","🔄 HOLD/WATCH"], key="m_signal")
+            m_score  = st.number_input("Score:", 0, 100, 60, key="m_score")
+            m_pattern= st.text_input("Pattern:", key="m_pattern")
+        with tm2:
+            m_entry  = st.number_input("Entry (Rp):", min_value=0.0, step=10.0, key="m_entry")
+            m_sl     = st.number_input("Stop Loss (Rp):", min_value=0.0, step=10.0, key="m_sl")
+            m_tp     = st.number_input("Take Profit (Rp):", min_value=0.0, step=10.0, key="m_tp")
+            m_date   = st.date_input("Tanggal:", value=datetime.today(), key="m_date")
+
+        if st.button("➕ Tambah", key="add_manual", type="primary"):
+            if m_ticker and m_entry>0:
+                logs = load_trade_log()
+                trade_id = f"{m_date}_{m_ticker}_manual"
+                if any(l["id"]==trade_id for l in logs):
+                    st.warning(f"Trade {m_ticker} tanggal {m_date} sudah ada.")
+                else:
+                    rr_m = round((m_tp-m_entry)/(m_entry-m_sl),1) if (m_entry-m_sl)>0 else 0
+                    logs.append({
+                        "id":      trade_id,
+                        "date":    str(m_date),
+                        "ticker":  m_ticker,
+                        "signal":  m_signal,
+                        "score":   int(m_score),
+                        "entry":   float(m_entry),
+                        "sl":      float(m_sl),
+                        "tp":      float(m_tp),
+                        "rr":      f"1:{rr_m}",
+                        "pattern": m_pattern or "—",
+                        "note":    "",
+                        "status": "OPEN"
+                    })
+                    save_trade_log(logs)
+                    st.success(f"✅ {m_ticker} ditambahkan."); st.rerun()
+            else:
+                st.error("Isi Kode Saham dan Harga Entry dulu.")
+
+with col_del:
+    with st.expander("🗑️ Hapus Trade Tertentu", expanded=False):
+        if logs:
+            all_ids = [f"{l['date']} — {l['ticker']} | Entry {fmt_price(l['entry'])}" for l in logs]
+            del_idx = st.selectbox("Pilih trade:", range(len(all_ids)),
+                                   format_func=lambda i: all_ids[i], key="del_sel")
+            if st.button("🗑️ Hapus", key="del_btn", type="secondary"):
+                del_id = logs[del_idx]["id"]
+                logs   = [l for l in logs if l["id"] != del_id]
+                save_trade_log(logs)
+                st.success("Dihapus."); st.rerun()
+        else:
+            st.info("Tidak ada data untuk dihapus.")
+
+st.divider()
+
+# ── DOWNLOAD ──────────────────────────────────────────────────────────────────
+dl1,dl2 = st.columns(2)
+logs_now = load_trade_log()
+with dl1:
+    st.download_button("⬇️ Download CSV",
+        pd.DataFrame(logs_now).to_csv(index=False).encode("utf-8"),
+        f"idx_log_{datetime.now().strftime('%Y%m%d')}.csv", "text/csv",
+        use_container_width=True)
+with dl2:
+    st.download_button("⬇️ Download JSON",
+        json.dumps(logs_now, indent=2, default=str).encode("utf-8"),
+        f"idx_log_{datetime.now().strftime('%Y%m%d')}.json", "application/json",
+        use_container_width=True)
