@@ -718,7 +718,7 @@ def get_price_progress(ticker_jk, entry, sl, tp, target_date):
 def evaluate_trade_progress(ticker, entry, sl, tp, target_date, hold_days):
     """
     Evaluasi status trade:
-    - Jika sudah TP atau SL → return (status, exit_price, exit_date, reason, pnl_pct)
+    - Jika sudah TP atau SL → return (status, exit_price, exit_date, reason, pnl_pct, days_held, dist_tp, dist_sl)
     - Jika belum, hitung jarak ke TP/SL dan saran aksi
     """
     ticker_jk = ticker + ".JK"
@@ -838,7 +838,7 @@ def compute_tracker_stats(logs: list) -> dict:
     }
 
 # ==================================================
-# HEADER & MARKET PULSE (sama)
+# HEADER & MARKET PULSE
 # ==================================================
 st.markdown("""
 <h1 style='text-align:center;color:#00bbff;letter-spacing:3px;font-family:monospace;'>
@@ -873,7 +873,7 @@ if notifications:
         """, unsafe_allow_html=True)
     st.markdown("---")
 
-# Market Pulse (sama seperti sebelumnya)
+# Market Pulse
 col_ihsg, col_sector = st.columns([1,1])
 ihsg_df = pd.DataFrame(); ihsg_change=0.0
 
@@ -920,7 +920,7 @@ with col_sector:
 st.divider()
 
 # ==================================================
-# DEEP ANALYSIS — SINGLE TICKER (sama)
+# DEEP ANALYSIS — SINGLE TICKER
 # ==================================================
 st.subheader("🔬 Deep Analysis — Single Ticker")
 inp1,inp2,inp3 = st.columns([1,2,1])
@@ -1053,9 +1053,8 @@ with sc3:
 with sc4:
     top_n = st.number_input("Top N Hasil:",5,50,10)
 
-# --- TAMBAHAN: Hold Period ---
+# Hold Period
 hold_period = st.radio("⏱️ Hold Period (hari)", options=[1, 3], index=1, horizontal=True, help="1 hari = exit besok, 3 hari = max 3 hari")
-# ------------------------------
 
 is_all_bei = "ALL BEI" in idx_choice
 
@@ -1207,7 +1206,6 @@ if st.button("🚀 MULAI SCAN SEKARANG",use_container_width=True,type="primary")
         else:
             st.caption("ℹ️ Semua ticker hari ini sudah tercatat di tracker.")
 
-        # Tampilkan rekomendasi dalam bentuk kartu (sama seperti sebelumnya)
         st.markdown("### 📝 Interpretasi Tiap Saham")
         for _, row in df_res.iterrows():
             score_v = row['Score']
@@ -1349,14 +1347,21 @@ else:
     m5.metric("📈 Avg P&L/trade", f"{stats['avg_pnl']:+.2f}%")
     m6.metric("💰 Total P&L",     f"{stats['total_pnl']:+.2f}%")
 
-    st.caption(f"📊 Win Rate per Hold Period: 1 Hari = {stats['stats_1d']['wins']}/{stats['stats_1d']['total']} ({stats['stats_1d']['wins']/stats['stats_1d']['total']*100:.1f}%) | "
-               f"3 Hari = {stats['stats_3d']['wins']}/{stats['stats_3d']['total']} ({stats['stats_3d']['wins']/stats['stats_3d']['total']*100:.1f}%)")
+    # Tampilkan win rate per hold period dengan pengecekan zero division
+    def format_wr(stats_dict):
+        total = stats_dict['total']
+        wins = stats_dict['wins']
+        if total == 0:
+            return "0/0 (0.0%)"
+        return f"{wins}/{total} ({wins/total*100:.1f}%)"
+
+    st.caption(f"📊 Win Rate per Hold Period: 1 Hari = {format_wr(stats['stats_1d'])} | "
+               f"3 Hari = {format_wr(stats['stats_3d'])}")
 
     # TAMPILAN REKOMENDASI AKTIF (OPEN)
     open_trades = [l for l in logs if l["status"] == "OPEN"]
     if open_trades:
         st.markdown("### 🔄 Rekomendasi Aktif & Progress")
-        # Urutkan dari yang paling lama
         open_trades_sorted = sorted(open_trades, key=lambda x: x["date"])
         for trade in open_trades_sorted:
             target_date = date.fromisoformat(trade["date"])
@@ -1366,11 +1371,9 @@ else:
             tp = float(trade["tp"])
             ticker = trade["ticker"]
 
-            # Evaluasi ulang untuk dapatkan progress terbaru
             status, curr_price, exit_date, action, pnl, days_held, dist_tp, dist_sl = evaluate_trade_progress(
                 ticker, entry, sl, tp, target_date, hold_days
             )
-            # Jika sudah berubah status, simpan (bisa terjadi jika ada perubahan intraday)
             if status != "OPEN":
                 trade["status"] = status
                 trade["exit_price"] = curr_price
@@ -1378,30 +1381,17 @@ else:
                 trade["auto_resolved"] = True
                 trade["note"] = action
                 save_trade_log(logs)
-                st.rerun()  # refresh
+                st.rerun()
                 break
 
-            # Hitung persentase jarak ke TP dan SL
             if curr_price:
-                dist_to_tp_pct = (tp - curr_price) / tp * 100 if tp > 0 else 0
-                dist_to_sl_pct = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
-                # Progress bar menuju TP
                 progress_to_tp = max(0, min(100, (curr_price - entry) / (tp - entry) * 100 if tp != entry else 0))
-                progress_to_sl = max(0, min(100, (entry - curr_price) / (entry - sl) * 100 if entry != sl else 0))
+                dist_to_sl_pct = (curr_price - sl) / curr_price * 100 if curr_price > 0 else 0
             else:
-                dist_to_tp_pct = dist_to_sl_pct = progress_to_tp = progress_to_sl = 0
+                progress_to_tp = 0
+                dist_to_sl_pct = 0
 
-            # Warna aksi
-            if "Segera TP" in action:
-                act_color = "#00ff99"
-            elif "Cut loss" in action:
-                act_color = "#ff4466"
-            elif "Menuju TP" in action:
-                act_color = "#88ff88"
-            elif "Mendekati SL" in action:
-                act_color = "#ffaa66"
-            else:
-                act_color = "#ffcc00"
+            act_color = "#00ff99" if "Segera TP" in action else ("#ff4466" if "Cut loss" in action else ("#88ff88" if "Menuju TP" in action else ("#ffaa66" if "Mendekati SL" in action else "#ffcc00")))
 
             st.markdown(f"""
             <div style='background:#0a1020;border:1px solid #1e3050;border-radius:12px;padding:16px;margin:12px 0;'>
@@ -1435,7 +1425,7 @@ else:
             </div>
             """, unsafe_allow_html=True)
 
-    # HISTORY HARIAN (sama seperti sebelumnya)
+    # HISTORY HARIAN
     st.markdown("### 📅 History Harian — Hijau = WIN, Merah = LOSS")
     all_dates = sorted({r['date'] for r in logs}, reverse=True)
 
@@ -1487,7 +1477,7 @@ else:
 
     st.divider()
 
-    # UPDATE MANUAL (sama)
+    # UPDATE MANUAL
     st.markdown("#### ✏️ Update Hasil Trade Manual")
     open_logs = [l for l in logs if l["status"] == "OPEN"]
     if open_logs:
@@ -1526,7 +1516,7 @@ else:
     else:
         st.success("🎉 Tidak ada trade open saat ini!")
 
-    # TAMBAH MANUAL (sama)
+    # TAMBAH MANUAL
     with st.expander("➕ Tambah Trade Manual", expanded=False):
         tm1,tm2,tm3=st.columns(3)
         with tm1:
@@ -1563,7 +1553,7 @@ else:
 
     st.divider()
 
-    # LOG LENGKAP (sama)
+    # LOG LENGKAP
     st.markdown("#### 📋 Log Semua Trade")
     f1,f2,f3=st.columns(3)
     with f1: filter_status=st.selectbox("Filter Status:",["Semua","OPEN","WIN","LOSS","MANUAL"],key="fs_log")
@@ -1601,7 +1591,7 @@ else:
     styled_log=df_log[exist_cols].sort_values("date",ascending=False).style.map(style_status,subset=["status"])
     st.dataframe(styled_log,use_container_width=True,hide_index=True)
 
-    # HAPUS + DOWNLOAD (sama)
+    # HAPUS + DOWNLOAD
     with st.expander("🗑️ Hapus Trade dari Log",expanded=False):
         all_ids=[f"{l['date']} — {l['ticker']} ({l['status']})" for l in logs]
         del_idx=st.selectbox("Pilih trade:",range(len(all_ids)),format_func=lambda i:all_ids[i],key="del_trade_sel")
