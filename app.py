@@ -477,6 +477,18 @@ def save_scan_results_to_log(df_results: pd.DataFrame, scan_date_str: str):
     new_entries = 0
     for _, row in df_results.head(10).iterrows():
         key = (scan_date_str, row["Ticker"])
-        if key in existing_keys: continue
+        if key in existing_keys: 
+            continue
         logs.append({
-            "id":       f"{scan_date_str}_{row['Ticker']}
+            "id": f"{scan_date_str}_{row['Ticker']}",
+            "date": scan_date_str,
+            "ticker": row["Ticker"],
+            "signal": row["Signal"],
+            "score": int(row["Score"]),
+            "entry": float(row["Price"]),
+            "sl": float(row["SL"]),
+            "tp": float(row["TP"]),
+            "rr": str(row["R:R"]),
+            "pattern": row.get("Pattern", "—"),
+            "note": "",
+            "status": "OPEN",
