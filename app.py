@@ -16,7 +16,7 @@ import pytz
 # ==================================================
 # CONFIG
 # ==================================================
-st.set_page_config(page_title="IDX Terminal v6 - Teknikal + Interpretasi", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="IDX Terminal v6 - Rekomendasi Harian", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
@@ -32,19 +32,18 @@ body, .stApp { background-color: #07090f; color: #d0d8e8; }
 .tag-sbuy   { background:#004422; color:#00ff99; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
 .tag-buy    { background:#002e18; color:#44dd88; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
 .tag-hold   { background:#332200; color:#ffcc00; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
-.tag-sell   { background:#3a0010; color:#ff4466; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
 .universe-badge {
     display:inline-block; background:#0a1428; border:1px solid #2244aa;
     color:#4488ff; padding:2px 10px; border-radius:12px; font-size:12px; margin:2px;
 }
 div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
-.progress-label { font-size:12px; color:#aaa; margin-bottom:4px; }
-.progress-bar-container { background:#1e2a3a; border-radius:10px; height:8px; width:100%; margin:5px 0; }
-.progress-bar-fill { background:#00ff99; border-radius:10px; height:8px; width:0%; }
-.insight-box {
-    background: #0a1428; border-left: 4px solid #00bbff; border-radius: 8px;
-    padding: 10px 15px; margin: 10px 0; font-size: 13px; color: #c0d0e0;
+.reco-card {
+    background: #0a1020; border-radius: 12px; border-left: 4px solid #00bbff;
+    padding: 12px 16px; margin: 8px 0; display: flex; flex-wrap: wrap;
+    justify-content: space-between; align-items: center;
 }
+.reco-left { flex: 2; min-width: 150px; }
+.reco-right { flex: 3; text-align: right; font-size: 13px; color: #aac; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -180,8 +179,8 @@ def safe_float(val, default=0.0):
     except: return default
 
 def calc_sr(df):
-    if len(df) < 20:
-        return [], []
+    """Menghitung support dan resistance dari swing high/low"""
+    if len(df) < 20: return [], []
     hh = df['high'].rolling(5, center=True).max()
     ll = df['low'].rolling(5, center=True).min()
     res = sorted(df[df['high'] == hh]['high'].dropna().unique(), reverse=True)[:3]
@@ -189,15 +188,13 @@ def calc_sr(df):
     return list(res), list(sup)
 
 # ==================================================
-# TEKNIKAL LEVELS & INTERPRETASI GRAFIK
+# TEKNIKAL LEVELS
 # ==================================================
 def get_swing_low_high(df, lookback=5):
     if len(df) < lookback:
         return df['low'].min(), df['high'].max()
     recent = df.iloc[-lookback:]
-    swing_low = recent['low'].min()
-    swing_high = recent['high'].max()
-    return swing_low, swing_high
+    return recent['low'].min(), recent['high'].max()
 
 def get_pivot_points(df):
     last = df.iloc[-1]
@@ -220,115 +217,11 @@ def get_support_resistance(df, n=10):
     supports = sorted(lows.unique())[:3]
     return resistances, supports
 
-def detect_trend(df):
-    if len(df) < 20:
-        return "Data tidak cukup"
-    last = df.iloc[-1]
-    prev = df.iloc[-2]
-    ema20_now = safe_float(last['ema20'])
-    ema20_prev = safe_float(prev['ema20'])
-    slope = ema20_now - ema20_prev
-    price = safe_float(last['close'])
-    if price > ema20_now and slope > 0:
-        return "UPTREND (bullish)"
-    elif price < ema20_now and slope < 0:
-        return "DOWNTREND (bearish)"
-    else:
-        return "SIDEWAYS (konsolidasi)"
-
-def detect_candlestick_pattern(df):
-    if len(df) < 3:
-        return "—"
-    o = df['open'].values
-    h = df['high'].values
-    l = df['low'].values
-    c = df['close'].values
-    i = -1
-    body = abs(c[i]-o[i])
-    range_candle = h[i]-l[i]
-    upper_shadow = h[i] - max(c[i], o[i])
-    lower_shadow = min(c[i], o[i]) - l[i]
-    patterns = []
-    if range_candle > 0:
-        if lower_shadow >= 2*body and upper_shadow <= 0.3*body:
-            patterns.append("🔨 Hammer (bullish reversal)")
-        if upper_shadow >= 2*body and lower_shadow <= 0.3*body:
-            patterns.append("⬆️ Inverted Hammer (bullish)")
-        if body/range_candle < 0.1:
-            patterns.append("✳️ Doji (indecision / reversal)")
-        if body/range_candle > 0.85:
-            patterns.append("💪 Marubozu (strong momentum)")
-    prev_body = abs(c[-2]-o[-2])
-    if c[-2] < o[-2] and c[i] > o[i] and body > prev_body:
-        patterns.append("🟢 Bullish Engulfing (reversal up)")
-    if c[-2] > o[-2] and c[i] < o[i] and body > prev_body:
-        patterns.append("🔴 Bearish Engulfing (reversal down)")
-    if len(df)>=3:
-        if c[-3] < o[-3] and abs(c[-2]-o[-2]) < 0.003*c[-2] and c[i] > o[i]:
-            patterns.append("🌅 Morning Star (bullish reversal)")
-        if c[-3] > o[-3] and abs(c[-2]-o[-2]) < 0.003*c[-2] and c[i] < o[i]:
-            patterns.append("🌇 Evening Star (bearish reversal)")
-    return patterns[0] if patterns else "Tidak ada pola signifikan"
-
-def detect_rsi_divergence(df):
-    if len(df) < 20:
-        return None
-    prices = df['close'].values
-    rsi = df['rsi'].values
-    last_price = prices[-1]
-    last_rsi = rsi[-1]
-    price_lows = []
-    rsi_lows = []
-    for i in range(-10, -1):
-        if prices[i] < prices[i-1] and prices[i] < prices[i+1]:
-            price_lows.append((i, prices[i]))
-            rsi_lows.append((i, rsi[i]))
-    if len(price_lows) >= 2:
-        if price_lows[-1][1] < price_lows[-2][1] and rsi_lows[-1][1] > rsi_lows[-2][1]:
-            return "Bullish Divergence (harga turun, RSI naik) → potensi reversal naik"
-        price_highs = []
-        rsi_highs = []
-        for i in range(-10, -1):
-            if prices[i] > prices[i-1] and prices[i] > prices[i+1]:
-                price_highs.append((i, prices[i]))
-                rsi_highs.append((i, rsi[i]))
-        if len(price_highs) >= 2:
-            if price_highs[-1][1] > price_highs[-2][1] and rsi_highs[-1][1] < rsi_highs[-2][1]:
-                return "Bearish Divergence (harga naik, RSI turun) → potensi reversal turun"
-    return None
-
-def detect_volume_surge(df, threshold=1.5):
-    if len(df) < 20:
-        return None, False
-    avg_vol = df['volume'].rolling(20).mean().iloc[-1]
-    last_vol = df['volume'].iloc[-1]
-    ratio = last_vol / avg_vol if avg_vol > 0 else 0
-    if ratio >= threshold:
-        return f"Volume surge {ratio:.1f}x → konfirmasi breakout atau reversal", True
-    return f"Volume normal ({ratio:.1f}x)", False
-
-def detect_breakout(df, resistances, supports):
-    last_close = df['close'].iloc[-1]
-    last_high = df['high'].iloc[-1]
-    last_low = df['low'].iloc[-1]
-    breakout_up = False
-    breakout_down = False
-    if resistances:
-        nearest_res = min([r for r in resistances if r > last_close], default=None)
-        if nearest_res and last_high > nearest_res:
-            breakout_up = True
-    if supports:
-        nearest_sup = max([s for s in supports if s < last_close], default=None)
-        if nearest_sup and last_low < nearest_sup:
-            breakout_down = True
-    return breakout_up, breakout_down
-
-def get_technical_levels(df, score, mode="aggressive"):
+def get_technical_levels(df, score):
     if df.empty or len(df) < 20:
         return None, None, None, None, None, None
     df = df.copy()
     df['ema20'] = ta.ema(df['close'], length=20)
-    df['ema50'] = ta.ema(df['close'], length=50)
     df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
     bb = ta.bbands(df['close'], length=20, std=2)
     if bb is not None and not bb.empty:
@@ -345,6 +238,7 @@ def get_technical_levels(df, score, mode="aggressive"):
     pivot, r1, r2, s1, s2 = get_pivot_points(df)
     resistances, supports = get_support_resistance(df, 10)
 
+    # Entry
     if close > ema20:
         entry = max(ema20, bb_lower)
         entry = min(close, entry * 1.01)
@@ -358,6 +252,7 @@ def get_technical_levels(df, score, mode="aggressive"):
     entry = max(entry, close * 0.97)
     entry = round(entry, 0)
 
+    # SL
     sl_candidates = [swing_low * 0.99, s1 * 0.99, s2 * 0.99, bb_lower * 0.98]
     sl_candidates = [s for s in sl_candidates if s > 0 and s < entry]
     if sl_candidates:
@@ -367,6 +262,7 @@ def get_technical_levels(df, score, mode="aggressive"):
     sl = max(sl, entry * 0.95)
     sl = round(sl, 0)
 
+    # TP
     risk = entry - sl
     if risk <= 0:
         risk = entry * 0.01
@@ -381,6 +277,7 @@ def get_technical_levels(df, score, mode="aggressive"):
     tp = round(tp, 0)
     rr = round((tp - entry) / (entry - sl), 2) if (entry - sl) > 0 else 0
 
+    # Signal
     if score >= 70 and close > ema20:
         signal = "⚡ STRONG BUY"
         sig_color = "#00ff99"
@@ -596,77 +493,40 @@ def run_parallel_scan(tickers, scan_params, max_workers=10, progress_placeholder
     return results, debug_log, errors
 
 # ==================================================
-# INTERPRETASI GRAFIK
+# INTERPRETASI SINGKAT UNTUK SCANNER
 # ==================================================
-def generate_chart_insights(df, ticker, entry, sl, tp, score, signal):
-    if df.empty:
-        return "Data tidak cukup."
-    last = df.iloc[-1]
-    close = safe_float(last['close'])
-    ema20 = safe_float(last['ema20'] if 'ema20' in df.columns else close)
-    ema50 = safe_float(last['ema50'] if 'ema50' in df.columns else close)
-    rsi = safe_float(last['rsi'] if 'rsi' in df.columns else 50)
-    macd = safe_float(last['macd'] if 'macd' in df.columns else 0)
-    sig = safe_float(last['sig'] if 'sig' in df.columns else 0)
-    
-    trend = detect_trend(df)
-    candle_pattern = detect_candlestick_pattern(df)
-    divergence = detect_rsi_divergence(df)
-    vol_msg, vol_surge = detect_volume_surge(df)
-    resistances, supports = get_support_resistance(df, 10)
-    breakout_up, breakout_down = detect_breakout(df, resistances, supports)
-    
-    insights = []
-    insights.append(f"📈 **Tren:** {trend}")
-    if trend == "UPTREND (bullish)":
-        insights.append("✅ Harga di atas EMA20 dan EMA20 naik → momentum bullish.")
-    elif trend == "DOWNTREND (bearish)":
-        insights.append("⚠️ Harga di bawah EMA20 dan EMA20 turun → hindari posisi long.")
+def interpret_scanner_row(row, ihsg_change=0.0):
+    name = row['Ticker']
+    score = row['Score']
+    signal = row['Signal']
+    rsi = row['RSI']
+    vsurge = "🔥" in str(row.get('Vol',''))
+    macd_ok = row['MACD'] == "✅"
+    ema_ok = row['EMA20'] == "✅"
+    reasons = []
+    warnings = []
+    if score >= 70: reasons.append(f"skor tinggi ({score}/100)")
+    if vsurge: reasons.append("volume surge 🔥")
+    if macd_ok: reasons.append("MACD bullish")
+    if ema_ok: reasons.append("di atas EMA20")
+    if 55 <= rsi <= 72: reasons.append(f"RSI momentum prime ({rsi})")
+    elif 40 <= rsi < 55: reasons.append(f"RSI akumulasi ({rsi})")
+    elif rsi < 35: reasons.append(f"RSI oversold ({rsi}) — potensi rebound")
+    if not ema_ok: warnings.append("harga di bawah EMA20")
+    if not macd_ok: warnings.append("MACD masih bearish")
+    if rsi > 75: warnings.append(f"RSI panas ({rsi})")
+    if not vsurge: warnings.append("volume belum surge")
+    if ihsg_change < -0.5: warnings.append("IHSG melemah")
+    if "STRONG" in signal and not warnings:
+        verdict = f"🟢 <b>BUY SEKARANG</b> — {', '.join(reasons[:3])}. Setup premium."
+    elif "BUY" in signal and len(warnings) <= 1:
+        w_note = f" Perhatikan: {warnings[0]}." if warnings else ""
+        verdict = f"🟡 <b>BUY sizing kecil</b> — {', '.join(reasons[:2])}.{w_note}"
+    elif warnings:
+        verdict = f"⏳ <b>Tunggu konfirmasi</b> — {', '.join(warnings[:2])}. Masuk setelah reversal konfirmasi."
     else:
-        insights.append("🟡 Konsolidasi, tunggu breakout.")
-    
-    insights.append(f"🕯️ **Pola Candlestick Terakhir:** {candle_pattern}")
-    if "Hammer" in candle_pattern or "Engulfing" in candle_pattern or "Morning Star" in candle_pattern:
-        insights.append("🔨 Pola reversal bullish terdeteksi → potensi kenaikan.")
-    elif "Bearish Engulfing" in candle_pattern or "Evening Star" in candle_pattern:
-        insights.append("🔻 Pola reversal bearish → waspada koreksi.")
-    elif "Doji" in candle_pattern:
-        insights.append("✳️ Doji menandakan ketidakpastian. Tunggu konfirmasi candle berikutnya.")
-    
-    insights.append(f"📊 **RSI (14):** {rsi:.1f}")
-    if rsi > 70:
-        insights.append("⚠️ RSI overbought (>70) → potensi koreksi segera.")
-    elif rsi < 30:
-        insights.append("✅ RSI oversold (<30) → potensi rebound teknikal.")
-    elif 40 <= rsi <= 60:
-        insights.append("🟢 RSI netral, aman untuk entry.")
-    
-    if divergence:
-        insights.append(f"🔄 **Divergence:** {divergence}")
-    
-    insights.append(f"📦 **Volume:** {vol_msg}")
-    if vol_surge:
-        insights.append("🔥 Lonjakan volume mengkonfirmasi pergerakan harga.")
-    
-    if breakout_up:
-        insights.append("🚀 **Breakout resistansi!** Harga menembus level resistance. Potensi lanjutan naik.")
-    elif breakout_down:
-        insights.append("📉 **Breakdown support!** Harga jatuh di bawah support. Hindari beli.")
-    
-    if supports:
-        s_str = ", ".join([f"{int(s):,}" for s in supports[-2:]])
-        insights.append(f"🟢 **Support terdekat:** {s_str}")
-    if resistances:
-        r_str = ", ".join([f"{int(r):,}" for r in resistances[:2]])
-        insights.append(f"🔴 **Resistance terdekat:** {r_str}")
-    
-    insights.append(f"💰 **Entry yang direkomendasikan:** {entry:,.0f}")
-    insights.append(f"🛑 **Stop Loss:** {sl:,.0f} ({(entry-sl)/entry*100:.1f}% di bawah entry)")
-    insights.append(f"🎯 **Take Profit:** {tp:,.0f} ({(tp-entry)/entry*100:.1f}% di atas entry)")
-    risk_reward = (tp-entry)/(entry-sl) if (entry-sl)>0 else 0
-    insights.append(f"⚖️ **Risk/Reward:** 1:{risk_reward:.2f} {'✅ Ideal' if risk_reward>=2 else '⚠️ Kurang ideal (min 1:2)'}")
-    
-    return insights
+        verdict = f"👀 <b>Watchlist</b> — Setup sedang terbentuk."
+    return verdict
 
 # ==================================================
 # WIN/LOSS TRACKER
@@ -798,8 +658,8 @@ def compute_tracker_stats(logs: list) -> dict:
 # HEADER & MARKET PULSE
 # ==================================================
 st.markdown("""
-<h1 style='text-align:center;color:#00bbff;'>⚡ IDX TERMINAL v6 — TEKNIKAL + INTERPRETASI GRAFIK</h1>
-<p style='text-align:center;color:#445566;'>Analisis Candlestick, S/R, Divergence, Breakout, Volume Surge</p>
+<h1 style='text-align:center;color:#00bbff;'>⚡ IDX TERMINAL v6 — REKOMENDASI HARIAN</h1>
+<p style='text-align:center;color:#445566;'>Entry Teknikal · Auto Win/Loss Tracker · 10 Rekomendasi Terbaik</p>
 """, unsafe_allow_html=True)
 
 notifications = auto_resolve_all_trades()
@@ -850,7 +710,7 @@ with col_sector:
 st.divider()
 
 # ==================================================
-# DEEP ANALYSIS dengan Interpretasi Grafik
+# DEEP ANALYSIS (single ticker) dengan calc_sr
 # ==================================================
 st.subheader("🔬 Deep Analysis — Single Ticker")
 inp1,inp2,inp3 = st.columns([1,2,1])
@@ -882,10 +742,7 @@ if target:
             e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
             pats=detect_patterns(df)
             vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
-            res,sup = calc_sr(df)
-            
-            # Interpretasi grafik
-            insights = generate_chart_insights(df, target, entry, sl, tp, score, signal)
+            res,sup = calc_sr(df)   # <--- fungsi calc_sr sudah ditambahkan
             
             st.markdown(f"### {target}")
             c1,c2,c3,c4,c5 = st.columns(5)
@@ -895,39 +752,29 @@ if target:
             c4.metric("Volume", vlbl)
             c5.metric("Close", f"{cl:,.0f}")
             
-            # Tampilkan insight dalam box
-            st.markdown("#### 📋 Interpretasi Grafik Otomatis")
-            insight_html = "<div class='insight-box'>" + "<br>".join(insights) + "</div>"
-            st.markdown(insight_html, unsafe_allow_html=True)
+            st.markdown(f"""
+            <div style='background:#0a1428; border-radius:10px; padding:15px; margin:10px 0'>
+                <b>💡 Rekomendasi Entry:</b> Rp {entry:,.0f}<br>
+                <b>🛑 Stop Loss:</b> Rp {sl:,.0f} ({(entry-sl)/entry*100:.1f}%)<br>
+                <b>🎯 Take Profit:</b> Rp {tp:,.0f} ({(tp-entry)/entry*100:.1f}%)<br>
+                <b>⚖️ Risk/Reward:</b> 1:{rr}<br>
+                <b>📊 Pola Candlestick:</b> {pats[0] if pats else '—'}<br>
+                <b>📈 Support/Resistance:</b> S: {', '.join([str(int(s)) for s in sup[:2]])} | R: {', '.join([str(int(r)) for r in res[:2]])}
+            </div>
+            """, unsafe_allow_html=True)
             
-            # Chart dengan anotasi S/R
-            fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.55,0.25,0.20], vertical_spacing=0.04)
+            # Chart sederhana
+            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7,0.3])
             fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'],
                                          increasing_line_color='#00ff99', decreasing_line_color='#ff4466'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange', width=1.8), name='EMA20'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['ema50'], line=dict(color='#00aaff', width=1.2, dash='dot'), name='EMA50'), row=1, col=1)
-            # Support & resistance
-            for s in sup[-2:]:
-                fig.add_hline(y=s, line_dash="dash", line_color="green", opacity=0.5, row=1, col=1)
-            for r in res[:2]:
-                fig.add_hline(y=r, line_dash="dash", line_color="red", opacity=0.5, row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange', width=1.5)), row=1, col=1)
             fig.add_hline(y=sl, line_dash="dash", line_color="#ff4466", annotation_text=f"SL {sl:,.0f}", row=1, col=1)
             fig.add_hline(y=tp, line_dash="dash", line_color="#00ff99", annotation_text=f"TP {tp:,.0f}", row=1, col=1)
             fig.add_hline(y=entry, line_dash="dot", line_color="#ffcc00", annotation_text=f"Entry {entry:,.0f}", row=1, col=1)
-            # MACD
-            hc = ['#00ff99' if v>=0 else '#ff4466' for v in df['hist'].fillna(0)]
-            fig.add_trace(go.Bar(x=df.index, y=df['hist'], marker_color=hc, name='Hist'), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['macd'], line=dict(color='#00bbff'), name='MACD'), row=2, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['sig'], line=dict(color='orange'), name='Signal'), row=2, col=1)
-            # RSI
-            fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], line=dict(color='#bb77ff'), name='RSI'), row=3, col=1)
-            fig.add_hline(y=72, line_dash="dot", line_color="red", annotation_text="OB", row=3, col=1)
-            fig.add_hline(y=30, line_dash="dot", line_color="green", annotation_text="OS", row=3, col=1)
-            fig.add_hrect(y0=55, y1=72, fillcolor="rgba(0,255,150,0.05)", line_width=0, row=3, col=1)
-            # Volume di subplot RSI
-            vc = ['#00ff99' if c>=o else '#ff4466' for c,o in zip(df['close'], df['open'])]
-            fig.add_trace(go.Bar(x=df.index, y=df['volume']/df['volume'].max()*30, marker_color=vc, opacity=0.35, showlegend=False), row=3, col=1)
-            fig.update_layout(height=680, template='plotly_dark', xaxis_rangeslider_visible=False)
+            fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], line=dict(color='#bb77ff')), row=2, col=1)
+            fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+            fig.update_layout(height=500, template='plotly_dark', xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.warning(f"Data tidak cukup untuk {target}.")
@@ -935,9 +782,11 @@ if target:
 st.divider()
 
 # ==================================================
-# SMART SCANNER (ringkas)
+# SMART SCANNER - 10 REKOMENDASI TERBAIK
 # ==================================================
-st.subheader("🎯 Smart Scanner — Pilih Universe & Hold Period")
+st.subheader("🎯 Smart Scanner — Dapatkan 10 Rekomendasi Saham untuk Hari Esok")
+st.markdown("Pilih universe dan filter, klik scan. Sistem akan menampilkan **10 saham dengan score tertinggi** beserta entry, SL, TP, dan alasan.")
+
 sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
 with sc1:
     idx_choice = st.selectbox("📊 Universe:", list(INDEX_UNIVERSE.keys()))
@@ -946,9 +795,9 @@ with sc2:
 with sc3:
     min_score = st.slider("Min Score:", 0, 100, 55)
 with sc4:
-    top_n = st.number_input("Top N:", 5, 50, 10)
+    top_n = st.number_input("Top N:", 5, 50, 10, help="Tampilkan berapa banyak saham")
 
-hold_period = st.radio("⏱️ Hold Period (hari)", [1,3], index=1, horizontal=True)
+hold_period = st.radio("⏱️ Hold Period (hari)", [1,3], index=1, horizontal=True, help="1 hari = exit besok, 3 hari = max 3 hari")
 is_all_bei = "ALL BEI" in idx_choice
 
 selected_universe = INDEX_UNIVERSE[idx_choice]
@@ -960,15 +809,15 @@ combined_universe = list(dict.fromkeys(selected_universe + extra_from_sector))
 col_info1, col_info2 = st.columns([3,1])
 with col_info1:
     badge_html = " ".join([f"<span class='universe-badge'>{t}</span>" for t in combined_universe[:40]])
-    st.markdown(f"**Universe: {len(combined_universe)} saham**<br>{badge_html}", unsafe_allow_html=True)
+    st.markdown(f"**Universe aktif: {len(combined_universe)} saham**<br>{badge_html}", unsafe_allow_html=True)
 with col_info2:
     signal_filter = st.selectbox("Filter Signal:", ["Semua BUY", "Strong BUY Only", "Semua (incl HOLD)"])
 
-with st.expander("⚙️ Filter Tambahan", expanded=False):
+with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
     fc1, fc2, fc3 = st.columns(3)
     with fc1:
         min_vol_ratio = st.slider("Min Volume Ratio:", 0.5, 3.0, 1.0, 0.1)
-        require_surge = st.checkbox("Wajib Volume Surge", value=False)
+        require_surge = st.checkbox("Wajib Volume Surge (≥1.5x)", value=False)
     with fc2:
         min_rsi = st.slider("RSI Min:", 10, 50, 30)
         max_rsi = st.slider("RSI Max:", 50, 90, 70)
@@ -978,13 +827,13 @@ with st.expander("⚙️ Filter Tambahan", expanded=False):
     if is_all_bei:
         max_workers = st.slider("Thread Paralel:", 3, 20, 10, key="mw")
         use_vol_prefilter = st.checkbox("Pre-filter volume", value=True)
-        min_avg_lot = st.slider("Min avg lot:", 100, 2000, 500) if use_vol_prefilter else 500
+        min_avg_lot = st.slider("Min avg lot (ribuan):", 100, 2000, 500) if use_vol_prefilter else 500
     else:
         max_workers = 10
         use_vol_prefilter = False
         min_avg_lot = 500
 
-show_debug = st.checkbox("Debug Mode", value=False)
+show_debug = st.checkbox("🐛 Debug Mode (tampilkan kenapa saham gugur)", value=False)
 
 if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
     tickers_to_scan = add_jk(combined_universe)
@@ -992,6 +841,7 @@ if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
     start_time = time.time()
     scan_params = (min_score, signal_filter, require_above_ema, min_vol_ratio, require_surge, require_macd_bull,
                    min_rsi, max_rsi, min_avg_lot, use_vol_prefilter)
+    
     if is_all_bei:
         results, debug_log, errors = run_parallel_scan(tickers_to_scan, scan_params, max_workers=max_workers,
                                                        progress_placeholder=prog, status_placeholder=status)
@@ -999,7 +849,7 @@ if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
         results = []; debug_log = []; errors = 0
         for i, t in enumerate(tickers_to_scan):
             prog.progress((i+1)/len(tickers_to_scan))
-            status.markdown(f"Scanning {t}... ({i+1}/{len(tickers_to_scan)}) | Candidates: {len(results)}")
+            status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: {len(results)}")
             ticker_name = t.replace(".JK","")
             try:
                 d = analyze_full_cached(t, period="6mo")
@@ -1036,45 +886,89 @@ if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
             except Exception as e:
                 errors+=1
                 if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Exception","Alasan":str(e)})
+    
     elapsed = time.time() - start_time
     prog.empty(); status.empty()
     st.caption(f"⏱️ Scan selesai dalam {elapsed:.1f} detik | {len(tickers_to_scan)} ticker | {errors} error")
+    
     if show_debug and debug_log:
-        with st.expander("Debug Log", expanded=True):
+        with st.expander("🐛 Debug Log - Saham yang gugur", expanded=False):
             st.dataframe(pd.DataFrame(debug_log))
+    
     if results:
         df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(top_n)
-        st.dataframe(df_res, use_container_width=True)
+        # Simpan ke tracker
         n_saved = save_scan_results_to_log(df_res, hold_days=hold_period)
         if n_saved > 0:
-            st.info(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
-        st.success(f"✅ {len(df_res)} kandidat dari {len(tickers_to_scan)} discan")
+            st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker. Hasil WIN/LOSS akan muncul otomatis nanti.")
+        
+        st.markdown("## 🏆 10 REKOMENDASI SAHAM UNTUK HARI ESOK")
+        st.markdown(f"*Berdasarkan scan {datetime.now(TZ_JKT).strftime('%Y-%m-%d %H:%M')} WIB | Hold period: {hold_period} hari*")
+        
+        # Tabel utama
+        display_cols = ["Ticker","Score","Signal","Price","SL","TP","R:R","RSI","Vol","MACD","EMA20","Pattern"]
+        styled = df_res[display_cols].style.map(lambda x: 'background-color:#004422;color:#00ff99' if isinstance(x, (int,float)) and x>=70 else 
+                                                ('background-color:#332200;color:#ffcc00' if isinstance(x, (int,float)) and x>=55 else ''), subset=['Score'])
+        st.dataframe(styled, use_container_width=True, hide_index=True)
+        
+        # Tampilan kartu per saham (lebih mudah dibaca)
+        st.markdown("### 📋 Detail & Alasan Setiap Rekomendasi")
+        for idx, row in df_res.iterrows():
+            verdict = interpret_scanner_row(row, ihsg_change)
+            color_score = "#00ff99" if row['Score']>=70 else ("#ffcc00" if row['Score']>=55 else "#ff4466")
+            st.markdown(f"""
+            <div class='reco-card'>
+                <div class='reco-left'>
+                    <div style='font-size:20px; font-weight:900; color:#00bbff'>{row['Ticker']}</div>
+                    <div style='font-size:28px; font-weight:900; color:{color_score}'>{row['Score']}<span style='font-size:14px'>/100</span></div>
+                    <div><span class='{"tag-sbuy" if "STRONG" in row['Signal'] else "tag-buy"}'>{row['Signal']}</span></div>
+                </div>
+                <div class='reco-right'>
+                    <b>Entry:</b> {row['Price']:,} &nbsp;| <b>SL:</b> {row['SL']:,} &nbsp;| <b>TP:</b> {row['TP']:,} &nbsp;| <b>R:R</b> {row['R:R']}<br>
+                    <b>RSI:</b> {row['RSI']} &nbsp;| <b>Volume:</b> {row['Vol']} &nbsp;| <b>MACD:</b> {row['MACD']} &nbsp;| <b>EMA20:</b> {row['EMA20']}<br>
+                    <b>Pola:</b> {row['Pattern']}<br>
+                    <span style='color:#bbccff'>{verdict}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Tampilkan juga grafik distribusi score
+        fig_dist = go.Figure()
+        fig_dist.add_trace(go.Bar(x=df_res['Ticker'], y=df_res['Score'],
+                                  marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
+                                  text=df_res['Score'], textposition='outside'))
+        fig_dist.add_hline(y=70, line_dash="dot", line_color="#00ff99", annotation_text="Strong Buy Zone")
+        fig_dist.add_hline(y=55, line_dash="dot", line_color="#ffcc00", annotation_text="Buy Zone")
+        fig_dist.update_layout(height=300, template='plotly_dark', title="Distribusi Score Rekomendasi")
+        st.plotly_chart(fig_dist, use_container_width=True)
+        
     else:
-        st.warning("Tidak ada saham memenuhi kriteria.")
+        st.warning("❌ Tidak ada saham yang memenuhi kriteria. Coba turunkan min score atau perlonggar filter.")
 
 st.divider()
 
 # ==================================================
 # WIN/LOSS TRACKER (ringkas)
 # ==================================================
-st.subheader("📊 Win/Loss Tracker")
+st.subheader("📊 Win/Loss Tracker - Riwayat Rekomendasi")
 logs = load_trade_log()
 if not logs:
-    st.info("Belum ada data. Jalankan scanner.")
+    st.info("📭 Belum ada data. Jalankan scanner di atas untuk menghasilkan rekomendasi.")
 else:
     stats = compute_tracker_stats(logs)
-    m1,m2,m3,m4,m5,m6 = st.columns(6)
-    m1.metric("Win Rate", f"{stats['win_rate']}%")
-    m2.metric("Menang", stats['wins'])
-    m3.metric("Kalah", stats['losses'])
-    m4.metric("Open", stats['opens'])
-    m5.metric("Avg P&L", f"{stats['avg_pnl']:+.2f}%")
-    m6.metric("Total P&L", f"{stats['total_pnl']:+.2f}%")
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    col1.metric("Win Rate", f"{stats['win_rate']}%")
+    col2.metric("✅ Menang", stats['wins'])
+    col3.metric("❌ Kalah", stats['losses'])
+    col4.metric("⏳ Open", stats['opens'])
+    col5.metric("Avg P&L", f"{stats['avg_pnl']:+.2f}%")
+    col6.metric("Total P&L", f"{stats['total_pnl']:+.2f}%")
     
+    # Tampilkan open trades
     open_trades = [l for l in logs if l["status"] == "OPEN"]
     if open_trades:
-        st.markdown("### 🔄 Rekomendasi Aktif")
-        for trade in open_trades[:5]:
+        st.markdown("#### 🔄 Trade yang masih berjalan")
+        for trade in open_trades:
             target_date = date.fromisoformat(trade["date"])
             hold_days = trade.get("hold_days",3)
             entry, sl, tp = float(trade["entry"]), float(trade["sl"]), float(trade["tp"])
@@ -1087,6 +981,6 @@ else:
                 trade["auto_resolved"] = True
                 save_trade_log(logs)
                 st.rerun()
-            st.markdown(f"{trade['ticker']} | Entry {entry:,.0f} | SL {sl:,.0f} | TP {tp:,.0f} | Current {curr_price:,.0f} | {action}")
+            st.markdown(f"- **{trade['ticker']}** | Entry {entry:,.0f} | SL {sl:,.0f} | TP {tp:,.0f} | Current {curr_price:,.0f} | {action} | Hari {days_held}/{hold_days}")
     
-    st.download_button("⬇️ Download CSV", pd.DataFrame(logs).to_csv(index=False).encode("utf-8"), "idx_log.csv")
+    st.download_button("⬇️ Download Log CSV", pd.DataFrame(logs).to_csv(index=False).encode("utf-8"), "idx_trade_log.csv")
