@@ -1069,18 +1069,12 @@ for trade in day_trades:
     pct_to_tp = s.get('pct_to_tp', 0)
     pct_to_sl = s.get('pct_to_sl', 0)
 
-    # Progress bar visual
-    is_hit    = "HIT" in status_lbl or "CLOSED" in status_lbl
-    pct_gain  = (current-entry)/entry*100 if not is_hit else pct
-    tp_pct_abs= (tp-entry)/entry*100 if entry>0 else 0
-    sl_pct_abs= (entry-sl)/entry*100 if entry>0 else 0
-
-    # Warna kartu berdasarkan status
-    card_border = status_clr
-    pct_color   = "#00ff99" if pct>=0 else "#ff4466"
+    tp_pct_abs = (tp - entry) / entry * 100 if entry > 0 else 0
+    sl_pct_abs = (entry - sl) / entry * 100 if entry > 0 else 0
+    pct_color  = "#00ff99" if pct >= 0 else "#ff4466"
 
     st.markdown(f"""
-    <div style='background:#0a1020;border:1px solid {card_border}44;border-left:4px solid {card_border};
+    <div style='background:#0a1020;border:1px solid {status_clr}44;border-left:4px solid {status_clr};
                 border-radius:12px;padding:18px;margin:10px 0;'>
       <div style='display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;'>
 
@@ -1095,12 +1089,18 @@ for trade in day_trades:
         <div style='min-width:200px'>
           <div style='font-size:12px;color:#556;margin-bottom:4px'>HARGA</div>
           <div style='display:flex;gap:16px;flex-wrap:wrap'>
-            <div><div style='font-size:10px;color:#445'>Entry</div>
-                 <div style='font-size:14px;font-weight:700;color:#aac'>Rp {fmt_price(entry)}</div></div>
-            <div><div style='font-size:10px;color:#445'>Sekarang ({last_date})</div>
-                 <div style='font-size:16px;font-weight:900;color:{pct_color}'>Rp {fmt_price(current)}</div></div>
-            <div><div style='font-size:10px;color:#445'>% Change</div>
-                 <div style='font-size:16px;font-weight:900;color:{pct_color}'>{pct:+.1f}%</div></div>
+            <div>
+              <div style='font-size:10px;color:#445'>Entry</div>
+              <div style='font-size:14px;font-weight:700;color:#aac'>Rp {fmt_price(entry)}</div>
+            </div>
+            <div>
+              <div style='font-size:10px;color:#445'>Sekarang ({last_date})</div>
+              <div style='font-size:16px;font-weight:900;color:{pct_color}'>Rp {fmt_price(current)}</div>
+            </div>
+            <div>
+              <div style='font-size:10px;color:#445'>% Change</div>
+              <div style='font-size:16px;font-weight:900;color:{pct_color}'>{pct:+.1f}%</div>
+            </div>
           </div>
           <div style='display:flex;gap:12px;margin-top:8px'>
             <div><div style='font-size:10px;color:#ff6666'>SL {fmt_price(sl)}</div></div>
@@ -1128,7 +1128,7 @@ for trade in day_trades:
           <span>TP {fmt_price(tp)} (+{tp_pct_abs:.1f}%)</span>
         </div>
         <div style='background:#1a2030;border-radius:4px;height:8px;position:relative;overflow:hidden'>
-          <div style="position:absolute;left:0;top:0;height:100%;width:{max(0,min(100,50+pct/tp_pct_abs*50 if tp_pct_abs>0 else 50))}%;background:{pct_color};border-radius:4px;transition:width 0.5s;"></div>
+          <div style="position:absolute;left:0;top:0;height:100%;width:{max(0, min(100, 50 + pct/tp_pct_abs*50 if tp_pct_abs>0 else 50))}%;background:{pct_color};border-radius:4px;"></div>
         </div>
       </div>
     </div>
