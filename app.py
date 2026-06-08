@@ -13,158 +13,128 @@ import json
 from pathlib import Path
 import pytz
 
-# ==================================================
-# CONFIG
-# ==================================================
-st.set_page_config(page_title="IDX Terminal v6 - Rekomendasi Harian", layout="wide", initial_sidebar_state="collapsed")
+# ─────────────────────────────────────────────
+# PAGE CONFIG
+# ─────────────────────────────────────────────
+st.set_page_config(
+    page_title="IDX Terminal v7",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
 st.markdown("""
 <style>
 body, .stApp { background-color: #07090f; color: #d0d8e8; }
+.block-container { padding-top: 1.2rem; padding-bottom: 1rem; }
+
+/* Cards */
 .metric-card {
-    background: linear-gradient(135deg, #0e1420 0%, #111c2e 100%);
-    border: 1px solid #1e3050; border-radius: 10px;
-    padding: 14px; text-align: center; height: 100%;
+    background: #0e1420; border: 1px solid #1e3050;
+    border-radius: 10px; padding: 14px; text-align: center;
 }
-.score-high { color: #00ff99; font-size: 26px; font-weight: 900; }
-.score-mid  { color: #ffcc00; font-size: 26px; font-weight: 900; }
-.score-low  { color: #ff4466; font-size: 26px; font-weight: 900; }
-.tag-sbuy   { background:#004422; color:#00ff99; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
-.tag-buy    { background:#002e18; color:#44dd88; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
-.tag-hold   { background:#332200; color:#ffcc00; padding:3px 10px; border-radius:20px; font-weight:bold; font-size:13px; }
-.universe-badge {
-    display:inline-block; background:#0a1428; border:1px solid #2244aa;
-    color:#4488ff; padding:2px 10px; border-radius:12px; font-size:12px; margin:2px;
-}
-div[data-testid="stDataFrame"] { background: #0a0d15 !important; }
 .reco-card {
-    background: #0a1020; border-radius: 12px; border-left: 4px solid #00bbff;
-    padding: 12px 16px; margin: 8px 0; display: flex; flex-wrap: wrap;
-    justify-content: space-between; align-items: center;
+    background: #0a1020; border-radius: 12px;
+    border-left: 4px solid #00bbff;
+    padding: 14px 18px; margin: 8px 0;
 }
-.reco-left { flex: 2; min-width: 150px; }
-.reco-right { flex: 3; text-align: right; font-size: 13px; color: #aac; }
+.warn-card {
+    background: #120a0a; border-radius: 12px;
+    border-left: 4px solid #ff4466;
+    padding: 14px 18px; margin: 8px 0;
+}
+
+/* Score colors */
+.score-high { color: #00ff99; font-size: 28px; font-weight: 900; }
+.score-mid  { color: #ffcc00; font-size: 28px; font-weight: 900; }
+.score-low  { color: #ff4466; font-size: 28px; font-weight: 900; }
+
+/* Regime badges */
+.regime-trend    { background:#003322; color:#00ff99; padding:4px 12px; border-radius:20px; font-weight:700; font-size:13px; }
+.regime-range    { background:#332200; color:#ffcc00; padding:4px 12px; border-radius:20px; font-weight:700; font-size:13px; }
+.regime-transit  { background:#1a1a33; color:#8888ff; padding:4px 12px; border-radius:20px; font-weight:700; font-size:13px; }
+
+/* Signal tags */
+.tag-sbuy { background:#004422; color:#00ff99; padding:3px 10px; border-radius:20px; font-weight:700; font-size:13px; }
+.tag-buy  { background:#002e18; color:#44dd88; padding:3px 10px; border-radius:20px; font-weight:700; font-size:13px; }
+.tag-hold { background:#332200; color:#ffcc00; padding:3px 10px; border-radius:20px; font-weight:700; font-size:13px; }
+.tag-sell { background:#330011; color:#ff4466; padding:3px 10px; border-radius:20px; font-weight:700; font-size:13px; }
+
+/* Universe badges */
+.uni-badge {
+    display:inline-block; background:#0a1428; border:1px solid #2244aa;
+    color:#4488ff; padding:2px 8px; border-radius:10px; font-size:11px; margin:2px;
+}
+
+/* Tracker row */
+.trade-row {
+    background:#0a1020; border-radius:8px; border:1px solid #1e3050;
+    padding:10px 14px; margin:4px 0; font-size:13px;
+}
 </style>
 """, unsafe_allow_html=True)
 
-# ==================================================
-# UNIVERSE DATABASE (sama seperti sebelumnya, dipotong agar tidak terlalu panjang)
-# ==================================================
-IDX30 = [
-    "AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN",
-    "BMRI","BRIS","BUKA","CPIN","EXCL","GOTO","ICBP","INCO","INDF","ISAT",
-    "ITMG","KLBF","MDKA","MEDC","MIKA","PGEO","PTBA","TLKM","TOWR","UNTR"
-]
+# ─────────────────────────────────────────────
+# UNIVERSE DATA
+# ─────────────────────────────────────────────
+IDX30 = ["AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN",
+         "BMRI","BRIS","BUKA","CPIN","EXCL","GOTO","ICBP","INCO","INDF","ISAT",
+         "ITMG","KLBF","MDKA","MEDC","MIKA","PGEO","PTBA","TLKM","TOWR","UNTR"]
 
-LQ45 = IDX30 + [
+LQ45 = list(dict.fromkeys(IDX30 + [
     "ACES","AKRA","ARTO","BELI","BNGA","BSDE","CTRA","EMTK","GGRM","HMSP",
     "INTP","JSMR","MAPI","MYOR","PGAS","PNBN","PWON","SMGR","TBIG","TINS",
-    "TKIM","UNVR","HEAL","BYAN","CMRY","DCII","DSSA","NCKL","INKP","SILO"
-]
-LQ45 = list(dict.fromkeys(LQ45))[:45]
+    "TKIM","UNVR","HEAL","BYAN","CMRY","DCII","DSSA","NCKL","INKP","SILO"]))[:45]
 
-IDX80_EXTRA = [
-    "AVIA","BDMN","BKSL","BUMI","CDIA","DEWA","ENRG","GEMS","GIAA","JPFA",
-    "MEDC","MTEL","NISP","NCKL","PGEO","SMRA","SSIA","TAPG","TCPI","TBIG",
-    "SIDO","PYFA","ARCO","BRPT","FILM","ARCI","BBHI","CUAN","VKTR","SOHO",
-    "MDIY","BSIM","BIPI","JSMR","MAPI","PNBN","INKP","MYOR","CBDK","GGRM"
-]
+IDX80_EXTRA = ["AVIA","BDMN","BUMI","DEWA","ENRG","GEMS","JPFA","MTEL","NISP",
+               "SMRA","SSIA","TAPG","TCPI","SIDO","BRPT","FILM","CUAN","VKTR",
+               "SOHO","MDIY","BSIM","BIPI","MAPI","PNBN","INKP","MYOR","CBDK","GGRM"]
 IDX80 = list(dict.fromkeys(LQ45 + IDX80_EXTRA))[:80]
 
-IDX_HIDIV20 = [
-    "ADRO","ANTM","ASII","BBCA","BBNI","BBRI","BMRI","CPIN","GGRM","HMSP",
-    "INDF","ITMG","KLBF","MEDC","PGAS","PTBA","SMGR","TLKM","UNTR","UNVR"
-]
+IDX_HIDIV20 = ["ADRO","ANTM","ASII","BBCA","BBNI","BBRI","BMRI","CPIN","GGRM","HMSP",
+               "INDF","ITMG","KLBF","MEDC","PGAS","PTBA","SMGR","TLKM","UNTR","UNVR"]
 
-IDX_GROWTH30 = [
-    "ARTO","BELI","BRIS","BUKA","CMRY","DCII","DSSA","EMTK","GOTO","HEAL",
-    "MIKA","MDKA","MTEL","NCKL","PGEO","SILO","TBIG","TOWR","VKTR","AMMN",
-    "AADI","CUAN","BRMS","MBMA","TCPI","BREN","PANI","ARCO","CBDK","PGUN"
-]
+IDX_GROWTH30 = ["ARTO","BELI","BRIS","BUKA","CMRY","DCII","DSSA","EMTK","GOTO","HEAL",
+                "MIKA","MDKA","MTEL","NCKL","PGEO","SILO","TBIG","TOWR","VKTR","AMMN",
+                "AADI","CUAN","BRMS","MBMA","TCPI","BREN","PANI","ARCO","CBDK","PGUN"]
 
-IDX_SMC = [
-    "ACES","AKRA","BDMN","BNGA","BSDE","CTRA","GIAA","INTP","JPFA","JSMR",
-    "MAPI","MYOR","NISP","PNBN","PWON","SMGR","SMRA","SSIA","TAPG","TINS",
-    "SIDO","PYFA","SOHO","FILM","AVIA","BBHI","BUMI","GEMS","ARCI","DEWA",
-    "ENRG","BIPI","BSIM","MDIY","CDIA","BBTN","MEGA","MLPT","NSSS","MSIN"
-]
+IDX_SMC = ["ACES","AKRA","BDMN","BNGA","BSDE","CTRA","INTP","JPFA","JSMR","MAPI",
+           "MYOR","NISP","PNBN","PWON","SMGR","SMRA","SSIA","TAPG","TINS","SIDO",
+           "PYFA","SOHO","FILM","AVIA","BBHI","GEMS","BSIM","MDIY","MEGA","BBTN"]
 
-IDX_ALL_ACTIVE = list(dict.fromkeys([
-    *IDX80, *IDX_GROWTH30, *IDX_SMC, *IDX_HIDIV20,
-    "AGRO","BABP","BACA","BCIC","BDMN","BGTG","BJBR","BJTM","BKSW","BNBA",
-    "BNII","BNLI","BPBB","BSWD","BTPN","BVIC","DNAR","INPC","MAYA","MCOR",
-    "MEGA","NOBU","PNBS","SDRA","AGRS","AMAR","BBSI","BBYB","BCAP","BFIN",
-    "CFIN","DEFI","HDFA","HOME","IMJS","KREN","LPGI","MFIN","MTFN","PADI",
-    "PBID","TRIM","VRNA","WOMF",
-    "ADMR","BOSS","BSSR","BTEK","BULL","BUMI","DEWA","ELSA","ESSA","FIRE",
-    "GTSI","HRUM","INDY","KKGI","MBAP","MYOH","PKPK","PTRO","RUIS","SMMT",
-    "SMRU","TOBA","ARII","BRAU","CITA","DSSA","FIRE","GTBO","HATA","INDY",
-    "ITMG","KKGI","MBAP","MCOL","PTBA","RUIS","TOBA",
-    "ACST","ADHI","APLN","ASRI","BEST","BIKA","BIPP","BKDP","BKSL","COWL",
-    "CSAP","DGIK","DILD","DMAS","DUTI","ELTY","EMDE","EPMT","FMII","GAMA",
-    "GMTD","GPRA","GWSA","JRPT","KIJA","LAND","LCGP","LPCK","LPKR","MDLN",
-    "MKPI","MTLA","NIRO","OMRE","PANI","PJAA","PUDP","PWON","RDTX","RODA",
-    "SCBD","SGRO","SMDM","SMRA","SSIA","TARA","WIKA","WSKT","TOTL","NRCA",
-    "AISA","ALTO","CAMP","CEKA","CLEO","CNKO","COCO","CSMI","DAVO","DLTA",
-    "DMND","FOOD","GOOD","HOKI","ICBP","IKAN","INDF","KEJU","KINO","LPPF",
-    "LSIP","MAPI","MAPB","MBTO","MERK","MIDI","MLBI","MNKI","MRAT","MYOR",
-    "NFCX","PCAR","PZZA","RANC","RICY","ROTI","SCCO","SIDO","SKBM","SKLT",
-    "SMAR","SRTG","SSSS","STTP","TBLA","TCID","TGKA","TSPC","ULTJ","UNVR",
-    "WIIM","WOOD","AALI","BWPT","DSNG","GZCO","JAWA","LSIP","PALM","SGRO",
-    "SIMP","TAPG","UNSP","SSMS",
-    "DVLA","INAF","KAEF","KLBF","MIKA","PRDA","PYFA","SAME","SILO","SILO",
-    "HEAL","SOHO","SIDO","IRRA","OMED","PEHA","PRIM","RSGK","TSPC","MDRN",
-    "BTEL","CENT","EXCL","FREN","GOLD","HALO","ISAT","META","MNCN","MTEL",
-    "MYII","PGAS","SUPR","TBIG","TLKM","TOWR","TELE","TRIO","VKTR","WIFI",
-    "WTON","JSMR","CMNP","INDY","META","NELY","PTIS","RAJA",
-    "AGII","AKPI","ALDO","ALKA","ALMI","AMFG","APII","ARNA","BRNA","BTON",
-    "CTBN","DPNS","EKAD","GDST","IGAR","IGLAS","IMPC","INAI","INCI","INKP",
-    "INRU","INTP","ISSP","JTPE","JPRS","KDSI","KIAS","KPIG","LION","LMSH",
-    "MARK","MDKA","MLIA","NIKL","NCKL","PICO","SIAP","SINI","SMCB","SMGR",
-    "SPMA","SRSN","TBMS","TKIM","TPIA","TRST","UNIC","VOKS","WSBP","AMRT",
-    "ARTO","BELI","BUKA","CASH","CHIP","DCII","DIVA","EMTK","GOTO","IPTV",
-    "KIOS","MTDL","NFCX","POSA","SFAN","ATIC","AXIO","KREN","LUCK","MCAS",
-    "MPPA","MSIN","MSKY","NETV","OASA","OMED","RELI","TELE","TGRA","VKTR",
-    "APOL","ASSA","BIRD","BLTZ","BPTR","BULL","CASS","CMPP","GIAA","GOOD",
-    "IATA","INDX","IPCC","JTPE","LEAD","LNDF","MBSS","MIRA","NELY","PTIS",
-    "RAJA","SAFE","SMDR","SOCI","TMAS","TNCA","TPMA","TRUK","WEHA","WINS",
-    "AALI","ANJT","BWPT","DSNG","GZCO","JAWA","LSIP","MAGP","MGRO","PALM",
-    "SGRO","SIMP","SMAR","SSMS","TBLA","UNSP","TGRA","CPRO","IIKP","MBSS",
-]))
-
-MANUAL_SECTORS = {
-    "FINANCE":    ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","PNBN","MEGA","BDMN","NISP","BTPN","BBHI","BSIM","BBTN","BNLI","BBSI"],
-    "ENERGY":     ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","ENRG","GEMS","AADI","BYAN","DSSA","TCPI","INDY","BIPI"],
-    "HEALTHCARE": ["MIKA","HEAL","SILO","KLBF","SIDO","PYFA","SOHO","MIKA","BKSL"],
-    "BASIC MAT":  ["ANTM","TINS","MDKA","SMGR","INTP","TPIA","INCO","NCKL","AMMN","ARCI","BRMS","MBMA","CITA","ADMR","EMAS"],
-    "CONSUMER":   ["ACES","MAPI","AMRT","ICBP","INDF","GGRM","HMSP","UNVR","MYOR","CPIN","JPFA","CMRY","AVIA","MDIY"],
-    "INFRA":      ["TLKM","ISAT","EXCL","TOWR","TBIG","JSMR","MTEL","GIAA","PGAS","PGEO"],
-    "PROPERTY":   ["BSDE","PWON","CTRA","SMRA","SSIA","CBDK","BKSL","PANI","MKPI"],
-    "TECH/DIGITAL":["GOTO","BUKA","EMTK","DCII","BELI","BBHI","ARTO","COIN","VKTR"],
+UNIVERSES = {
+    "IDX30 — Blue Chip (30)":         IDX30,
+    "LQ45 — Liquid 45":               LQ45,
+    "IDX80 — Broad Market":           IDX80,
+    "IDX High Dividend 20":           IDX_HIDIV20,
+    "IDX Growth 30":                  IDX_GROWTH30,
+    "IDX SMC — Small/Mid Cap":        IDX_SMC,
+    "ALL Combined (~180 unik)":       list(dict.fromkeys(IDX80 + IDX_GROWTH30 + IDX_SMC)),
 }
 
-INDEX_UNIVERSE = {
-    "IDX30 (Blue Chip, ~30 saham)":           IDX30,
-    "LQ45 (Liquid 45, ~45 saham)":            LQ45,
-    "IDX80 (Broad Market, ~80 saham)":        IDX80,
-    "IDX High Dividend 20":                   IDX_HIDIV20,
-    "IDX Growth30":                            IDX_GROWTH30,
-    "IDX SMC Liquid (Small-Mid Cap)":         IDX_SMC,
-    "ALL IDX Combined (~180 unik)":           list(dict.fromkeys(IDX80 + IDX_GROWTH30 + IDX_SMC + IDX_HIDIV20)),
-    "🆕 ALL BEI Aktif (~400 saham, parallel)": IDX_ALL_ACTIVE,
+SECTORS = {
+    "Finance":    ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","PNBN","MEGA","BDMN","NISP","BBTN"],
+    "Energy":     ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","GEMS","AADI","BYAN","DSSA","TCPI","INDY"],
+    "Healthcare": ["MIKA","HEAL","SILO","KLBF","SIDO","PYFA","SOHO"],
+    "Basic Mat":  ["ANTM","TINS","MDKA","SMGR","INTP","TPIA","INCO","NCKL","AMMN","BRMS"],
+    "Consumer":   ["ACES","MAPI","AMRT","ICBP","INDF","GGRM","HMSP","UNVR","MYOR","CPIN","CMRY","AVIA"],
+    "Infra/Telco":["TLKM","ISAT","EXCL","TOWR","TBIG","JSMR","MTEL","PGAS","PGEO"],
+    "Property":   ["BSDE","PWON","CTRA","SMRA","SSIA","CBDK","PANI","MKPI"],
+    "Tech/Digital":["GOTO","BUKA","EMTK","DCII","BELI","BBHI","ARTO","VKTR"],
 }
 
-SECTOR_PROXY = {
-    "FINANCE":"BBCA","ENERGY":"ADRO","HEALTHCARE":"KLBF","BASIC MAT":"ANTM",
-    "CONSUMER":"ICBP","INFRA":"TLKM","PROPERTY":"BSDE","TECH":"GOTO",
-}
+SECTOR_PROXY = {"Finance":"BBCA","Energy":"ADRO","Healthcare":"KLBF","Basic Mat":"ANTM",
+                "Consumer":"ICBP","Infra/Telco":"TLKM","Property":"BSDE","Tech/Digital":"GOTO"}
 
-def add_jk(tickers):
-    return [t if t.endswith(".JK") else f"{t}.JK" for t in tickers]
+TZ_JKT   = pytz.timezone("Asia/Jakarta")
+TRACKER  = Path("idx_trade_log.json")
 
-# ==================================================
+# ─────────────────────────────────────────────
 # HELPERS
-# ==================================================
+# ─────────────────────────────────────────────
+def jk(t): return t if t.endswith(".JK") else f"{t}.JK"
+def add_jk(lst): return [jk(t) for t in lst]
+
 def clean_df(df):
     if df.empty: return df
     if isinstance(df.columns, pd.MultiIndex):
@@ -172,130 +142,134 @@ def clean_df(df):
     df.columns = [c.lower() for c in df.columns]
     return df
 
-def safe_float(val, default=0.0):
+def sf(val, default=0.0):
     try:
         v = float(val)
         return default if (np.isnan(v) or np.isinf(v)) else v
     except: return default
 
-def calc_sr(df):
-    """Menghitung support dan resistance dari swing high/low"""
-    if len(df) < 20: return [], []
-    hh = df['high'].rolling(5, center=True).max()
-    ll = df['low'].rolling(5, center=True).min()
-    res = sorted(df[df['high'] == hh]['high'].dropna().unique(), reverse=True)[:3]
-    sup = sorted(df[df['low'] == ll]['low'].dropna().unique())[:3]
-    return list(res), list(sup)
-
-# ==================================================
-# TEKNIKAL LEVELS
-# ==================================================
-def get_swing_low_high(df, lookback=5):
-    if len(df) < lookback:
-        return df['low'].min(), df['high'].max()
-    recent = df.iloc[-lookback:]
-    return recent['low'].min(), recent['high'].max()
-
-def get_pivot_points(df):
-    last = df.iloc[-1]
-    high = safe_float(last['high'])
-    low = safe_float(last['low'])
-    close = safe_float(last['close'])
-    pivot = (high + low + close) / 3
-    r1 = 2*pivot - low
-    r2 = pivot + (high - low)
-    s1 = 2*pivot - high
-    s2 = pivot - (high - low)
-    return pivot, r1, r2, s1, s2
-
-def get_support_resistance(df, n=10):
-    if len(df) < n:
-        return [], []
-    highs = df['high'].rolling(n, center=True).max().dropna()
-    lows = df['low'].rolling(n, center=True).min().dropna()
-    resistances = sorted(highs.unique(), reverse=True)[:3]
-    supports = sorted(lows.unique())[:3]
-    return resistances, supports
-
-def get_technical_levels(df, score):
-    if df.empty or len(df) < 20:
-        return None, None, None, None, None, None
+# ─────────────────────────────────────────────
+# CORE: FETCH + INDICATORS
+# ─────────────────────────────────────────────
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_df(ticker, period="6mo"):
+    df = clean_df(yf.download(ticker, period=period, progress=False))
+    if df.empty or len(df) < 52: return None
     df = df.copy()
-    df['ema20'] = ta.ema(df['close'], length=20)
+
+    # Trend
+    df['ema20']  = ta.ema(df['close'], length=20)
+    df['ema50']  = ta.ema(df['close'], length=50)
+    df['ema200'] = ta.ema(df['close'], length=200)
+
+    # Momentum
+    df['rsi']   = ta.rsi(df['close'], length=14)
+    stoch = ta.stoch(df['high'], df['low'], df['close'], k=14, d=3)
+    if stoch is not None and not stoch.empty:
+        df['stoch_k'] = stoch.iloc[:, 0]
+        df['stoch_d'] = stoch.iloc[:, 1]
+    else:
+        df['stoch_k'] = df['stoch_d'] = 50
+
+    macd_df = ta.macd(df['close'], fast=12, slow=26, signal=9)
+    if macd_df is not None and not macd_df.empty:
+        df['macd'] = macd_df.iloc[:, 0]
+        df['sig']  = macd_df.iloc[:, 1]
+        df['hist'] = macd_df.iloc[:, 2]
+    else:
+        df['macd'] = df['sig'] = df['hist'] = 0
+
+    # Volatility
     df['atr'] = ta.atr(df['high'], df['low'], df['close'], length=14)
     bb = ta.bbands(df['close'], length=20, std=2)
     if bb is not None and not bb.empty:
-        df['bb_l'] = bb.iloc[:,2]
+        df['bb_u'] = bb.iloc[:, 0]; df['bb_m'] = bb.iloc[:, 1]; df['bb_l'] = bb.iloc[:, 2]
+        df['bb_width'] = (df['bb_u'] - df['bb_l']) / df['bb_m']
     else:
-        df['bb_l'] = df['close']
+        df['bb_u'] = df['bb_m'] = df['bb_l'] = df['close']
+        df['bb_width'] = 0
 
+    # Regime — ADX
+    adx_df = ta.adx(df['high'], df['low'], df['close'], length=14)
+    if adx_df is not None and not adx_df.empty:
+        df['adx'] = adx_df.iloc[:, 0]
+        df['dmp'] = adx_df.iloc[:, 1]   # +DI
+        df['dmn'] = adx_df.iloc[:, 2]   # -DI
+    else:
+        df['adx'] = df['dmp'] = df['dmn'] = 20
+
+    # Volume
+    df['vol_ma20'] = df['volume'].rolling(20).mean()
+    df['vol_ratio'] = df['volume'] / df['vol_ma20'].replace(0, np.nan)
+
+    return df
+
+# ─────────────────────────────────────────────
+# REGIME DETECTION
+# ─────────────────────────────────────────────
+def detect_regime(df):
+    """Returns: 'trending' | 'ranging' | 'transition', adx_val"""
+    adx = sf(df['adx'].iloc[-1])
+    dmp = sf(df['dmp'].iloc[-1])
+    dmn = sf(df['dmn'].iloc[-1])
+    if adx > 25:
+        direction = "bullish" if dmp > dmn else "bearish"
+        return "trending", adx, direction
+    elif adx < 20:
+        return "ranging", adx, "neutral"
+    else:
+        return "transition", adx, "neutral"
+
+# ─────────────────────────────────────────────
+# VOLUME DIRECTION (FIX UTAMA)
+# ─────────────────────────────────────────────
+def volume_score(df):
+    """
+    Volume harus dikaitkan dengan arah candle.
+    Surge bullish vs surge bearish = berbeda signifikan.
+    """
     last = df.iloc[-1]
-    close = safe_float(last['close'])
-    ema20 = safe_float(last['ema20'])
-    atr = safe_float(last['atr'])
-    bb_lower = safe_float(last['bb_l'])
-    swing_low, swing_high = get_swing_low_high(df, 5)
-    pivot, r1, r2, s1, s2 = get_pivot_points(df)
-    resistances, supports = get_support_resistance(df, 10)
+    vr   = sf(last['vol_ratio'], 1.0)
+    cl   = sf(last['close'])
+    op   = sf(last['open'])
+    is_green = cl >= op
 
-    # Entry
-    if close > ema20:
-        entry = max(ema20, bb_lower)
-        entry = min(close, entry * 1.01)
+    if vr >= 2.0:
+        label = f"{vr:.1f}x 🔥🔥"
+        if is_green:   return 25, label, "surge_bull"
+        else:          return -20, label, "surge_bear"   # distribusi — bahaya
+    elif vr >= 1.5:
+        label = f"{vr:.1f}x 🔥"
+        if is_green:   return 18, label, "bull"
+        else:          return -10, label, "bear"
+    elif vr >= 1.0:
+        label = f"{vr:.1f}x"
+        if is_green:   return 8, label, "mild_bull"
+        else:          return 0, label, "mild_bear"
     else:
-        support_candidates = [s for s in supports if s < close] + [s1, s2, bb_lower]
-        valid_supports = [s for s in support_candidates if s > 0 and s < close]
-        if valid_supports:
-            entry = max(valid_supports)
-        else:
-            entry = close * 0.98
-    entry = max(entry, close * 0.97)
-    entry = round(entry, 0)
+        label = f"{vr:.1f}x"
+        return 2, label, "weak"
 
-    # SL
-    sl_candidates = [swing_low * 0.99, s1 * 0.99, s2 * 0.99, bb_lower * 0.98]
-    sl_candidates = [s for s in sl_candidates if s > 0 and s < entry]
-    if sl_candidates:
-        sl = max(sl_candidates)
-    else:
-        sl = entry - max(atr * 1.2, entry * 0.015)
-    sl = max(sl, entry * 0.95)
-    sl = round(sl, 0)
+# ─────────────────────────────────────────────
+# RSI DIVERGENCE (sederhana)
+# ─────────────────────────────────────────────
+def detect_rsi_divergence(df, lookback=14):
+    if len(df) < lookback + 2: return "none"
+    prices = df['close'].values[-lookback:]
+    rsis   = df['rsi'].values[-lookback:]
+    # Cari swing low dalam window
+    price_lows = [(i, prices[i]) for i in range(1, len(prices)-1)
+                  if prices[i] < prices[i-1] and prices[i] < prices[i+1]]
+    if len(price_lows) < 2: return "none"
+    p1, p2 = price_lows[-2], price_lows[-1]
+    r1, r2 = rsis[p1[0]], rsis[p2[0]]
+    if p2[1] < p1[1] and r2 > r1 + 3:   return "bullish"   # harga LL, RSI HL
+    if p2[1] > p1[1] and r2 < r1 - 3:   return "bearish"
+    return "none"
 
-    # TP
-    risk = entry - sl
-    if risk <= 0:
-        risk = entry * 0.01
-    res_candidates = [r for r in resistances if r > entry] + [r1, r2, swing_high]
-    valid_res = [r for r in res_candidates if r > entry]
-    if valid_res:
-        tp = min(valid_res)
-    else:
-        tp = entry + max(risk * 2, entry * 0.03)
-    if (tp - entry) < (risk * 1.5):
-        tp = entry + risk * 2
-    tp = round(tp, 0)
-    rr = round((tp - entry) / (entry - sl), 2) if (entry - sl) > 0 else 0
-
-    # Signal
-    if score >= 70 and close > ema20:
-        signal = "⚡ STRONG BUY"
-        sig_color = "#00ff99"
-    elif score >= 55 and close > ema20:
-        signal = "✅ BUY"
-        sig_color = "#44dd88"
-    elif score < 40 or close < ema20 * 0.98:
-        signal = "❌ SELL/AVOID"
-        sig_color = "#ff4466"
-    else:
-        signal = "🔄 HOLD/WATCH"
-        sig_color = "#ffcc00"
-
-    return entry, sl, tp, rr, signal, sig_color
-
-# ==================================================
-# FUNGSI DASAR (detect_patterns, volume_analysis, score_ticker)
-# ==================================================
+# ─────────────────────────────────────────────
+# CANDLESTICK PATTERNS
+# ─────────────────────────────────────────────
 def detect_patterns(df):
     if len(df) < 3: return ["—"]
     patterns = []
@@ -304,683 +278,794 @@ def detect_patterns(df):
     body = abs(c[i]-o[i]); rng = h[i]-l[i]
     uw = h[i]-max(c[i],o[i]); lw = min(c[i],o[i])-l[i]
     if rng > 0:
-        if lw >= 2*body and uw <= 0.3*body:         patterns.append("🔨 Hammer (Bullish)")
-        if uw >= 2*body and lw <= 0.3*body:          patterns.append("⬆️ Inv. Hammer")
-        if body/rng < 0.1:                           patterns.append("✳️ Doji (Reversal)")
-        if rng > 0 and body/rng > 0.85:
-            patterns.append("💪 Bullish Marubozu" if c[i]>o[i] else "👇 Bearish Marubozu")
+        if lw >= 2*body and uw <= 0.3*body:          patterns.append("🔨 Hammer")
+        if uw >= 2*body and lw <= 0.3*body:           patterns.append("⬆️ Shooting Star")
+        if body/rng < 0.1:                            patterns.append("✳️ Doji")
+        if body/rng > 0.85:
+            patterns.append("💪 Bull Marubozu" if c[i]>o[i] else "👇 Bear Marubozu")
     pb = abs(c[-2]-o[-2])
-    if c[-2]<o[-2] and c[i]>o[i] and body>pb:       patterns.append("🟢 Bullish Engulfing")
-    if c[-2]>o[-2] and c[i]<o[i] and body>pb:       patterns.append("🔴 Bearish Engulfing")
+    if c[-2]<o[-2] and c[i]>o[i] and body>pb:        patterns.append("🟢 Bull Engulfing")
+    if c[-2]>o[-2] and c[i]<o[i] and body>pb:        patterns.append("🔴 Bear Engulfing")
     if len(df)>=3:
         if c[-3]<o[-3] and abs(c[-2]-o[-2])<0.003*c[-2] and c[i]>o[i]: patterns.append("🌅 Morning Star")
         if c[-3]>o[-3] and abs(c[-2]-o[-2])<0.003*c[-2] and c[i]<o[i]: patterns.append("🌇 Evening Star")
-    return patterns or ["— No Pattern"]
+    return patterns or ["—"]
 
-def volume_analysis(df):
-    if 'volume' not in df.columns or len(df)<20: return 0,"N/A",False,False
-    avg = df['volume'].rolling(20).mean().iloc[-1]
-    last = df['volume'].iloc[-1]
-    ratio = safe_float(last/avg) if avg>0 else 0
-    is_surge = ratio >= 1.5
-    label = f"{ratio:.1f}x"
-    if is_surge: label += " 🔥"
-    return ratio, label, is_surge, is_surge
+# ─────────────────────────────────────────────
+# WEIGHTED SCORING — REGIME AWARE
+# ─────────────────────────────────────────────
+def score_ticker(df):
+    """
+    Bobot dinamis berdasarkan market regime.
+    Trending : Trend 40% | Volume 25% | Momentum 25% | Pattern 10%
+    Ranging  : Trend 15% | Volume 20% | Momentum 45% | Pattern 20%
+    Transition: 25/30/30/15
+    """
+    if df is None or df.empty or len(df) < 52:
+        return 0, {}, "ranging", 0
 
-def score_ticker(df, mode="aggressive"):
-    if df.empty or len(df) < 52: return 0, {}
-    df = df.copy()
-    df['ema20'] = ta.ema(df['close'], length=20)
-    df['ema50'] = ta.ema(df['close'], length=50)
-    df['rsi']   = ta.rsi(df['close'], length=14)
-    df['atr']   = ta.atr(df['high'], df['low'], df['close'], length=14)
-    macd_df     = ta.macd(df['close'], fast=12, slow=26, signal=9)
-    if macd_df is not None and not macd_df.empty:
-        df['macd']=macd_df.iloc[:,0]; df['sig']=macd_df.iloc[:,1]; df['hist']=macd_df.iloc[:,2]
+    last   = df.iloc[-1]
+    cl     = sf(last['close'])
+    op     = sf(last['open'])
+    e20    = sf(last['ema20'])
+    e50    = sf(last['ema50'])
+    e200   = sf(last['ema200'])
+    rsi    = sf(last['rsi'])
+    macd   = sf(last['macd'])
+    sig    = sf(last['sig'])
+    hist   = sf(last['hist'])
+    hist_p = sf(df['hist'].iloc[-2]) if len(df) > 2 else 0
+    stk    = sf(last['stoch_k'])
+    std_d  = sf(last['stoch_d'])
+    bb_l   = sf(last['bb_l'])
+    bb_m   = sf(last['bb_m'])
+    bb_u   = sf(last['bb_u'])
+    bb_w   = sf(last['bb_width'])
+    adx_v  = sf(last['adx'])
+    dmp    = sf(last['dmp'])
+    dmn    = sf(last['dmn'])
+
+    regime, adx_val, direction = detect_regime(df)
+
+    # ── TREND SCORE (raw 0–100) ──────────────────
+    t = 0
+    # EMA alignment
+    if cl > e20:             t += 20
+    if cl > e50:             t += 15
+    if e20 > e50:            t += 15   # golden cross zone
+    if e50 > e200 and e200 > 0: t += 10  # full bull alignment
+    # ADX strength bonus
+    if adx_v > 30 and dmp > dmn: t += 20
+    elif adx_v > 25 and dmp > dmn: t += 10
+    # EMA slope (2 candle)
+    if len(df) > 3:
+        ema20_slope = sf(df['ema20'].iloc[-1]) - sf(df['ema20'].iloc[-3])
+        if ema20_slope > 0: t += 10
+        elif ema20_slope < 0: t -= 10
+    t = max(0, min(t, 100))
+
+    # ── MOMENTUM SCORE (raw 0–100) ───────────────
+    m = 0
+    # RSI — context aware
+    if regime == "trending":
+        if 50 <= rsi <= 70:  m += 30
+        elif 40 <= rsi < 50: m += 15
+        elif rsi > 70:       m += 5    # overbought di trending masih ok
     else:
-        df['macd']=df['sig']=df['hist']=0
-    bb = ta.bbands(df['close'], length=20, std=2)
-    if bb is not None and not bb.empty:
-        df['bb_u']=bb.iloc[:,0]; df['bb_m']=bb.iloc[:,1]; df['bb_l']=bb.iloc[:,2]
+        if 30 <= rsi <= 45:  m += 35   # oversold di ranging = entry terbaik
+        elif 45 < rsi <= 55: m += 15
+        elif rsi > 70:       m -= 10   # overbought di ranging = bahaya
+    # MACD
+    if macd > sig:           m += 20
+    if hist > 0 and hist > hist_p: m += 15   # histogram expanding
+    # Stochastic (lebih relevan di ranging)
+    if stk < 20 and stk > std_d:   m += 20   # stoch oversold cross
+    elif stk < 40 and stk > std_d: m += 10
+    # RSI Divergence
+    div = detect_rsi_divergence(df)
+    if div == "bullish":     m += 20
+    elif div == "bearish":   m -= 15
+    m = max(0, min(m, 100))
+
+    # ── VOLUME SCORE (raw) ───────────────────────
+    vs_raw, vol_label, vol_type = volume_score(df)
+    v = max(0, min(vs_raw + 50, 100))   # normalize ke 0-100
+
+    # ── PATTERN SCORE (raw 0–100) ────────────────
+    pats = detect_patterns(df)
+    p = 0
+    for pat in pats:
+        if any(k in pat for k in ['Bull Engulfing','Morning Star','Bull Marubozu','Hammer']): p = 80; break
+        elif 'Doji' in pat: p = max(p, 40)
+        elif any(k in pat for k in ['Bear Engulfing','Evening Star','Bear Marubozu']): p = max(p, 10)
+    if p == 0: p = 30   # neutral
+
+    # ── BB ZONE BONUS ────────────────────────────
+    bb_bonus = 0
+    if cl <= bb_l * 1.005:   bb_bonus = 15   # di bawah BB lower = potential reversal
+    elif cl <= bb_m:          bb_bonus = 8
+    if bb_w < 0.03:           bb_bonus += 10  # BB squeeze = breakout imminent
+
+    # ── REGIME WEIGHTS ───────────────────────────
+    if regime == "trending":
+        weights = {"trend": 0.40, "momentum": 0.25, "volume": 0.25, "pattern": 0.10}
+    elif regime == "ranging":
+        weights = {"trend": 0.15, "momentum": 0.45, "volume": 0.20, "pattern": 0.20}
+    else:  # transition
+        weights = {"trend": 0.25, "momentum": 0.30, "volume": 0.30, "pattern": 0.15}
+
+    raw = (t * weights["trend"] +
+           m * weights["momentum"] +
+           v * weights["volume"] +
+           p * weights["pattern"])
+
+    score = min(int(raw + bb_bonus), 100)
+
+    detail = {
+        "Regime": f"{regime.title()} (ADX {adx_val:.0f})",
+        "Trend": f"{t}/100",
+        "Momentum": f"{m}/100",
+        "Volume": f"{v}/100 [{vol_label}]",
+        "Pattern": f"{p}/100",
+        "BB Bonus": bb_bonus,
+        "Weights": weights,
+        "RSI Div": div,
+        "Vol Type": vol_type,
+    }
+    return score, detail, regime, adx_val
+
+# ─────────────────────────────────────────────
+# TECHNICAL LEVELS — ENTRY / SL / TP
+# ─────────────────────────────────────────────
+def get_levels(df, score, regime):
+    if df is None or len(df) < 20: return None, None, None, None, "—", "#888"
+
+    last  = df.iloc[-1]
+    cl    = sf(last['close'])
+    e20   = sf(last['ema20'])
+    atr   = sf(last['atr'])
+    bb_l  = sf(last['bb_l'])
+    bb_m  = sf(last['bb_m'])
+
+    # Pivot
+    hv, lv, cv = sf(last['high']), sf(last['low']), cl
+    pivot = (hv + lv + cv) / 3
+    r1 = 2*pivot - lv;  r2 = pivot + (hv - lv)
+    s1 = 2*pivot - hv;  s2 = pivot - (hv - lv)
+
+    # Support/resistance dari rolling
+    highs = df['high'].rolling(10, center=True).max().dropna()
+    lows  = df['low'].rolling(10, center=True).min().dropna()
+    res_levels = sorted(highs.unique(), reverse=True)
+    sup_levels = sorted(lows.unique())
+
+    # Entry
+    if cl > e20:
+        entry_base = max(e20, bb_m) if regime == "trending" else max(bb_l, s1)
+        entry = min(cl, max(entry_base, cl * 0.985))
     else:
-        df['bb_u']=df['bb_m']=df['bb_l']=df['close']
+        sup_cands = [s for s in sup_levels[:3] if 0 < s < cl] + [s1, s2, bb_l]
+        valid_sup = [s for s in sup_cands if 0 < s < cl]
+        entry = max(valid_sup) if valid_sup else cl * 0.98
 
-    l=df.iloc[-1]
-    cl=safe_float(l['close']); e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
-    rsi=safe_float(l['rsi']); macd=safe_float(l['macd']); sig=safe_float(l['sig'])
-    hist=safe_float(l['hist']); bb_l=safe_float(l['bb_l']); bb_m=safe_float(l['bb_m'])
+    entry = max(entry, cl * 0.97)
+    entry = round(entry)
 
-    ts=0
-    if cl>e20: ts+=12
-    if cl>e50: ts+=8
-    gap=(cl-e20)/e20*100 if e20 else 0
-    if -1<=gap<=3: ts+=5
+    # SL — di bawah support terkuat
+    swing_low = df['low'].iloc[-5:].min()
+    sl_cands = [swing_low * 0.99, s1 * 0.99, bb_l * 0.98]
+    sl_cands = [s for s in sl_cands if 0 < s < entry]
+    sl = max(sl_cands) if sl_cands else entry - max(atr * 1.5, entry * 0.02)
+    sl = max(sl, entry * 0.94)
+    sl = round(sl)
 
-    ms=0
-    if 40<=rsi<=60: ms+=15
-    elif 30<=rsi<40 or 60<rsi<=65: ms+=8
-    if macd>sig: ms+=7
-    if hist>0 and len(df)>1 and safe_float(df['hist'].iloc[-2])>=0 and hist>safe_float(df['hist'].iloc[-2]):
-        ms+=3
+    # TP — ke resistance terdekat
+    risk = max(entry - sl, entry * 0.005)
+    res_cands = [r for r in res_levels[:3] if r > entry] + [r1, r2]
+    valid_res = [r for r in res_cands if r > entry]
+    tp = min(valid_res) if valid_res else entry + risk * 2.5
+    if (tp - entry) < risk * 1.8:
+        tp = entry + risk * 2.5
+    tp = round(tp)
+    rr = round((tp - entry) / (entry - sl), 2) if (entry - sl) > 0 else 0
 
-    vr,_,is_surge,_ = volume_analysis(df)
-    vs=min(int(vr*8),20)
-
-    bs=0
-    if cl<=bb_l*1.01: bs=15
-    elif cl<=bb_m: bs=7
-
-    pats=detect_patterns(df); ps=0
-    for p in pats:
-        if any(k in p for k in ['Engulfing','Morning Star','Hammer','Marubozu']): ps=15; break
-        elif 'Doji' in p or 'Inv.' in p: ps=max(ps,5)
-
-    score=min(ts+ms+vs+bs+ps,100)
-    detail={'Trend':ts,'Momentum':ms,'Volume':vs,'BB Zone':bs,'Pattern':ps}
-    return score, detail
-
-# ==================================================
-# ANALISIS FULL
-# ==================================================
-@st.cache_data(ttl=3600, show_spinner=False)
-def analyze_full_cached(ticker, period="6mo"):
-    return _analyze_full_core(ticker, period)
-
-def analyze_full(ticker, period="1y"):
-    return _analyze_full_core(ticker, period)
-
-def _analyze_full_core(ticker, period="6mo"):
-    df=yf.download(ticker, period=period, progress=False); df=clean_df(df)
-    if df.empty or len(df)<52: return None
-    df['ema20']=ta.ema(df['close'],length=20); df['ema50']=ta.ema(df['close'],length=50)
-    df['rsi']=ta.rsi(df['close'],length=14); df['atr']=ta.atr(df['high'],df['low'],df['close'],length=14)
-    macd_df=ta.macd(df['close'],fast=12,slow=26,signal=9)
-    if macd_df is not None and not macd_df.empty:
-        df['macd']=macd_df.iloc[:,0]; df['sig']=macd_df.iloc[:,1]; df['hist']=macd_df.iloc[:,2]
+    # Signal
+    if score >= 70 and cl > e20:
+        signal, color = "⚡ STRONG BUY", "#00ff99"
+    elif score >= 55 and cl >= e20 * 0.99:
+        signal, color = "✅ BUY", "#44dd88"
+    elif score >= 42:
+        signal, color = "🔄 WATCH", "#ffcc00"
     else:
-        df['macd']=df['sig']=df['hist']=0
-    bb=ta.bbands(df['close'],length=20,std=2)
-    if bb is not None and not bb.empty:
-        df['bb_u']=bb.iloc[:,0]; df['bb_m']=bb.iloc[:,1]; df['bb_l']=bb.iloc[:,2]
-    else:
-        df['bb_u']=df['bb_m']=df['bb_l']=df['close']
-    df['vol_ma20']=df['volume'].rolling(20).mean()
-    return df
+        signal, color = "❌ AVOID", "#ff4466"
 
-def quick_volume_check(ticker, min_avg_lot=500):
+    return entry, sl, tp, rr, signal, color
+
+# ─────────────────────────────────────────────
+# SCANNER — single ticker worker
+# ─────────────────────────────────────────────
+def scan_one(args):
+    (ticker, min_score, sig_filter, above_ema,
+     min_vr, req_surge, req_macd, min_rsi, max_rsi) = args
+    name = ticker.replace(".JK", "")
     try:
-        d = yf.download(ticker, period="10d", progress=False)
-        d = clean_df(d)
-        if d.empty or 'volume' not in d.columns: return False
-        avg_vol = d['volume'].mean()
-        return safe_float(avg_vol) >= (min_avg_lot * 100)
-    except:
-        return False
+        df = fetch_df(ticker, "6mo")
+        if df is None: return None, name, "Data kosong"
 
-def _scan_one(args):
-    (ticker, min_score, signal_filter, require_above_ema,
-     min_vol_ratio, require_surge, require_macd_bull,
-     min_rsi, max_rsi, min_avg_lot, use_vol_prefilter) = args
-    ticker_name = ticker.replace(".JK","")
-    try:
-        if use_vol_prefilter:
-            if not quick_volume_check(ticker, min_avg_lot):
-                return None, ticker_name, "Vol Pre-filter", f"Avg vol < {min_avg_lot} lot/hari"
-        d = analyze_full_cached(ticker, period="6mo")
-        if d is None or d.empty:
-            return None, ticker_name, "Data", "Data kosong"
-        last = d.iloc[-1]
-        rsi_q  = safe_float(last.get('rsi', 50))
-        cl_q   = safe_float(last.get('close', 0))
-        ema_q  = safe_float(last.get('ema20', cl_q))
-        macd_v = safe_float(last.get('macd', 0))
-        sig_v2 = safe_float(last.get('sig', 0))
-        if not (min_rsi <= rsi_q <= max_rsi):
-            return None, ticker_name, "RSI", f"RSI={rsi_q:.1f}"
-        if require_above_ema and cl_q < ema_q:
-            return None, ticker_name, "EMA20", f"Harga < EMA20"
-        sc_val, sc_det = score_ticker(d)
-        if sc_val < min_score:
-            return None, ticker_name, "Score", f"Score={sc_val}"
-        entry, sl, tp, rr, sig, _ = get_technical_levels(d, sc_val)
-        if entry is None:
-            return None, ticker_name, "Teknikal", "Gagal hitung level"
-        if "SELL" in sig or "WEAK" in sig:
-            return None, ticker_name, "Signal", sig
-        if signal_filter == "Strong BUY Only" and "STRONG" not in sig:
-            return None, ticker_name, "Signal Filter", "Butuh STRONG BUY"
-        if signal_filter == "Semua BUY" and "BUY" not in sig:
-            return None, ticker_name, "Signal Filter", "Bukan BUY"
-        vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(d)
-        if require_surge and not vsurge_light:
-            return None, ticker_name, "Volume", f"Vol={vr:.2f}x"
-        if vr < min_vol_ratio:
-            return None, ticker_name, "Volume Ratio", f"Vol={vr:.2f}x"
-        if require_macd_bull and macd_v <= sig_v2:
-            return None, ticker_name, "MACD", "MACD tidak bullish"
-        pats = detect_patterns(d)
-        result = {
-            "Ticker": ticker_name, "Score": sc_val, "Signal": sig, "Price": int(entry),
-            "RSI": round(rsi_q,1), "Vol": vlbl, "MACD": "✅" if macd_v > sig_v2 else "❌",
-            "EMA20": "✅" if cl_q >= ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-            "SL": int(sl), "TP": int(tp), "R:R": f"1:{rr}", "Pattern": pats[0] if pats else "—",
-        }
-        return result, ticker_name, None, None
+        last = df.iloc[-1]
+        rsi_v = sf(last.get('rsi', 50))
+        cl_v  = sf(last.get('close', 0))
+        e20_v = sf(last.get('ema20', cl_v))
+        macd_v = sf(last.get('macd', 0))
+        sig_v  = sf(last.get('sig', 0))
+        vr_v   = sf(last.get('vol_ratio', 1.0))
+
+        if not (min_rsi <= rsi_v <= max_rsi):   return None, name, f"RSI {rsi_v:.0f}"
+        if above_ema and cl_v < e20_v:           return None, name, "< EMA20"
+        if req_macd and macd_v <= sig_v:         return None, name, "MACD bearish"
+        if vr_v < min_vr:                        return None, name, f"Vol {vr_v:.1f}x"
+
+        score, detail, regime, adx_v = score_ticker(df)
+        if score < min_score:                    return None, name, f"Score {score}"
+
+        entry, sl, tp, rr, signal, _ = get_levels(df, score, regime)
+        if entry is None:                        return None, name, "Level error"
+
+        if "AVOID" in signal:                    return None, name, "Signal AVOID"
+        if sig_filter == "Strong BUY" and "STRONG" not in signal: return None, name, "Bukan Strong BUY"
+        if sig_filter == "BUY saja" and "BUY" not in signal:      return None, name, "Bukan BUY"
+
+        _, vol_lbl, vol_type = volume_score(df)
+        if req_surge and "surge" not in vol_type: return None, name, "Bukan surge"
+
+        div = detail.get("RSI Div", "none")
+        pats = detect_patterns(df)
+
+        return {
+            "Ticker":  name,
+            "Score":   score,
+            "Regime":  regime.title(),
+            "ADX":     round(adx_v, 1),
+            "Signal":  signal,
+            "Entry":   int(entry),
+            "SL":      int(sl),
+            "TP":      int(tp),
+            "R:R":     f"1:{rr}",
+            "RSI":     round(rsi_v, 1),
+            "Vol":     vol_lbl,
+            "VolType": vol_type,
+            "MACD":    "✅" if macd_v > sig_v else "❌",
+            "Div":     "🔼" if div=="bullish" else ("🔽" if div=="bearish" else "—"),
+            "Pattern": pats[0] if pats else "—",
+        }, name, None
+
     except Exception as e:
-        return None, ticker_name, "Exception", str(e)
+        return None, name, f"Err: {e}"
 
-def run_parallel_scan(tickers, scan_params, max_workers=10, progress_placeholder=None, status_placeholder=None):
-    args_list = [(t, *scan_params) for t in tickers]
-    results = []; debug_log = []; errors = 0; completed = 0; total = len(tickers)
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(_scan_one, args): args[0] for args in args_list}
-        for future in concurrent.futures.as_completed(futures):
-            completed += 1
-            ticker_raw = futures[future]
-            try:
-                result, ticker_name, gate, reason = future.result()
-                if result:
-                    results.append(result)
-                elif gate:
-                    debug_log.append({"Ticker": ticker_name, "Gugur di": gate, "Alasan": reason})
-            except Exception as e:
-                errors += 1
-                debug_log.append({"Ticker": ticker_raw.replace(".JK",""), "Gugur di": "Exception", "Alasan": str(e)})
-            if progress_placeholder:
-                progress_placeholder.progress(completed / total)
-            if status_placeholder:
-                status_placeholder.markdown(f"⚡ Parallel scan: {completed}/{total} | Kandidat: {len(results)}")
-    return results, debug_log, errors
-
-# ==================================================
-# INTERPRETASI SINGKAT UNTUK SCANNER
-# ==================================================
-def interpret_scanner_row(row, ihsg_change=0.0):
-    name = row['Ticker']
-    score = row['Score']
-    signal = row['Signal']
-    rsi = row['RSI']
-    vsurge = "🔥" in str(row.get('Vol',''))
-    macd_ok = row['MACD'] == "✅"
-    ema_ok = row['EMA20'] == "✅"
-    reasons = []
-    warnings = []
-    if score >= 70: reasons.append(f"skor tinggi ({score}/100)")
-    if vsurge: reasons.append("volume surge 🔥")
-    if macd_ok: reasons.append("MACD bullish")
-    if ema_ok: reasons.append("di atas EMA20")
-    if 55 <= rsi <= 72: reasons.append(f"RSI momentum prime ({rsi})")
-    elif 40 <= rsi < 55: reasons.append(f"RSI akumulasi ({rsi})")
-    elif rsi < 35: reasons.append(f"RSI oversold ({rsi}) — potensi rebound")
-    if not ema_ok: warnings.append("harga di bawah EMA20")
-    if not macd_ok: warnings.append("MACD masih bearish")
-    if rsi > 75: warnings.append(f"RSI panas ({rsi})")
-    if not vsurge: warnings.append("volume belum surge")
-    if ihsg_change < -0.5: warnings.append("IHSG melemah")
-    if "STRONG" in signal and not warnings:
-        verdict = f"🟢 <b>BUY SEKARANG</b> — {', '.join(reasons[:3])}. Setup premium."
-    elif "BUY" in signal and len(warnings) <= 1:
-        w_note = f" Perhatikan: {warnings[0]}." if warnings else ""
-        verdict = f"🟡 <b>BUY sizing kecil</b> — {', '.join(reasons[:2])}.{w_note}"
-    elif warnings:
-        verdict = f"⏳ <b>Tunggu konfirmasi</b> — {', '.join(warnings[:2])}. Masuk setelah reversal konfirmasi."
-    else:
-        verdict = f"👀 <b>Watchlist</b> — Setup sedang terbentuk."
-    return verdict
-
-# ==================================================
-# WIN/LOSS TRACKER
-# ==================================================
-TRACKER_FILE = Path("idx_trade_log.json")
-TZ_JKT = pytz.timezone("Asia/Jakarta")
-
-def load_trade_log() -> list:
-    if TRACKER_FILE.exists():
-        with open(TRACKER_FILE, "r") as f:
-            return json.load(f)
+# ─────────────────────────────────────────────
+# TRACKER I/O
+# ─────────────────────────────────────────────
+def load_log():
+    if TRACKER.exists():
+        with open(TRACKER) as f: return json.load(f)
     return []
 
-def save_trade_log(logs: list):
-    with open(TRACKER_FILE, "w") as f:
-        json.dump(logs, f, indent=2, default=str)
+def save_log(logs):
+    with open(TRACKER, "w") as f: json.dump(logs, f, indent=2, default=str)
 
-def save_scan_results_to_log(df_results: pd.DataFrame, hold_days: int, scan_date: str = None):
-    if scan_date is None:
-        scan_date = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
-    logs = load_trade_log()
-    existing_keys = {(e["date"], e["ticker"]) for e in logs}
-    new_entries = 0
-    for _, row in df_results.iterrows():
-        key = (scan_date, row["Ticker"])
-        if key in existing_keys:
-            continue
+def save_scan_to_log(df_res, hold_days):
+    today = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
+    logs = load_log()
+    existing = {(e["date"], e["ticker"]) for e in logs}
+    n = 0
+    for _, row in df_res.iterrows():
+        key = (today, row["Ticker"])
+        if key in existing: continue
         logs.append({
-            "id": f"{scan_date}_{row['Ticker']}", "date": scan_date, "ticker": row["Ticker"],
-            "signal": row["Signal"], "score": int(row["Score"]), "entry": float(row["Price"]),
-            "sl": float(row["SL"]), "tp": float(row["TP"]), "rr": str(row["R:R"]),
-            "pattern": row.get("Pattern", "—"), "hold_days": hold_days,
-            "exit_price": None, "exit_date": None, "status": "OPEN", "auto_resolved": False, "note": "",
+            "id": f"{today}_{row['Ticker']}", "date": today, "ticker": row["Ticker"],
+            "signal": row["Signal"], "score": int(row["Score"]),
+            "entry": float(row["Entry"]), "sl": float(row["SL"]), "tp": float(row["TP"]),
+            "rr": str(row["R:R"]), "hold_days": hold_days,
+            "exit_price": None, "exit_date": None, "status": "OPEN", "note": ""
         })
-        new_entries += 1
-    save_trade_log(logs)
-    return new_entries
+        n += 1
+    save_log(logs)
+    return n
 
-def is_market_closed() -> tuple[bool, str]:
-    now_jkt = datetime.now(TZ_JKT)
-    closed = now_jkt.hour > 15 or (now_jkt.hour == 15 and now_jkt.minute >= 30)
-    return closed, now_jkt.strftime("%H:%M WIB")
-
-def get_price_progress(ticker_jk, entry, sl, tp, target_date):
-    try:
-        end = datetime.now(TZ_JKT).date()
-        start = target_date - timedelta(days=1)
-        hist = clean_df(yf.download(ticker_jk, start=start, end=end + timedelta(days=1), progress=False))
-        if hist.empty:
-            return None, None, None, None, None
-        hist_from = hist[hist.index.date >= target_date]
-        if hist_from.empty:
-            return None, None, None, None, None
-        return safe_float(hist_from['close'].iloc[-1]), hist_from['high'].max(), hist_from['low'].min(), safe_float(hist_from['close'].iloc[-1]), hist_from
-    except:
-        return None, None, None, None, None
-
-def evaluate_trade_progress(ticker, entry, sl, tp, target_date, hold_days):
-    ticker_jk = ticker + ".JK"
-    curr_price, highest, lowest, last_close, hist = get_price_progress(ticker_jk, entry, sl, tp, target_date)
-    if curr_price is None:
-        return "OPEN", None, None, "Data tidak tersedia", 0, 0, 0, 0
+def eval_trade(trade):
+    ticker = trade["ticker"]
+    entry, sl, tp = float(trade["entry"]), float(trade["sl"]), float(trade["tp"])
+    tgt = date.fromisoformat(trade["date"])
+    hold = trade.get("hold_days", 3)
     today = datetime.now(TZ_JKT).date()
-    days_held = (today - target_date).days
-    if highest >= tp:
-        return "WIN", tp, target_date + timedelta(days=1), "TP tercapai", (tp-entry)/entry*100, days_held, 0, 0
-    if lowest <= sl:
-        return "LOSS", sl, target_date + timedelta(days=1), "SL tersentuh", (sl-entry)/entry*100, days_held, 0, 0
-    if days_held >= hold_days:
-        pnl = (last_close - entry)/entry*100
-        return ("WIN" if pnl>=0 else "LOSS"), last_close, today, f"Force close {hold_days} hari", pnl, days_held, 0, 0
-    dist_to_tp = (tp-curr_price)/tp*100 if tp>0 else 0
-    dist_to_sl = (curr_price-sl)/curr_price*100 if curr_price>0 else 0
-    if dist_to_tp <= 1.5: action = "🚀 Segera TP"
-    elif dist_to_sl <= 1.5: action = "⚠️ Cut loss"
-    elif dist_to_tp <= 3: action = "📈 Menuju TP"
-    elif dist_to_sl <= 3: action = "📉 Mendekati SL"
-    else: action = "🟡 Hold"
-    return "OPEN", curr_price, None, action, 0, days_held, dist_to_tp, dist_to_sl
+    days = (today - tgt).days
+    try:
+        hist = clean_df(yf.download(jk(ticker), start=tgt - timedelta(days=1),
+                                    end=today + timedelta(days=1), progress=False))
+        hist = hist[hist.index.date >= tgt]
+        if hist.empty: return "OPEN", entry, days, "Data kosong", 0
+        hi, lo, last_c = hist['high'].max(), hist['low'].min(), sf(hist['close'].iloc[-1])
+        if hi >= tp:   return "WIN",  tp,     days, "TP ✅", round((tp-entry)/entry*100, 2)
+        if lo <= sl:   return "LOSS", sl,     days, "SL ❌", round((sl-entry)/entry*100, 2)
+        if days >= hold:
+            pnl = round((last_c-entry)/entry*100, 2)
+            return ("WIN" if pnl >= 0 else "LOSS"), last_c, days, f"Force close D{hold}", pnl
+        dist_tp = round((tp-last_c)/tp*100, 1)
+        dist_sl = round((last_c-sl)/last_c*100, 1)
+        action = "🚀 TP dekat" if dist_tp<=1.5 else ("⚠️ SL dekat" if dist_sl<=1.5 else "🟡 Hold")
+        return "OPEN", last_c, days, action, round((last_c-entry)/entry*100, 2)
+    except:
+        return "OPEN", entry, days, "Gagal fetch", 0
 
-def auto_resolve_all_trades():
-    logs = load_trade_log()
-    updated = False
-    notifs = []
-    for trade in logs:
-        if trade["status"] != "OPEN":
-            continue
-        target_date = date.fromisoformat(trade["date"])
-        hold_days = trade.get("hold_days", 3)
-        entry = float(trade["entry"]); sl = float(trade["sl"]); tp = float(trade["tp"])
-        status, exit_price, exit_date, reason, pnl, days_held, _, _ = evaluate_trade_progress(
-            trade["ticker"], entry, sl, tp, target_date, hold_days
-        )
+def auto_resolve():
+    logs = load_log(); updated = False
+    for t in logs:
+        if t["status"] != "OPEN": continue
+        status, ep, days, note, pnl = eval_trade(t)
         if status != "OPEN":
-            trade["status"] = status; trade["exit_price"] = exit_price; trade["exit_date"] = str(exit_date) if exit_date else None
-            trade["auto_resolved"] = True; trade["note"] = reason; updated = True
-            notifs.append({"ticker": trade["ticker"], "status": status, "pnl_pct": pnl, "days_held": days_held})
-    if updated:
-        save_trade_log(logs)
-    return notifs
+            t.update({"status": status, "exit_price": ep,
+                      "exit_date": str(datetime.now(TZ_JKT).date()), "note": note})
+            updated = True
+    if updated: save_log(logs)
 
-def compute_tracker_stats(logs: list) -> dict:
+def tracker_stats(logs):
     closed = [l for l in logs if l["status"] in ("WIN","LOSS")]
-    wins = [l for l in closed if l["status"]=="WIN"]
-    losses = [l for l in closed if l["status"]=="LOSS"]
-    pnl_list = []
+    wins   = [l for l in closed if l["status"] == "WIN"]
+    pnls   = []
     for l in closed:
         if l.get("exit_price") and l.get("entry"):
-            pnl_list.append((float(l["exit_price"])-float(l["entry"]))/float(l["entry"])*100)
-    win_rate = round(len(wins)/len(closed)*100,1) if closed else 0
-    avg_pnl = round(sum(pnl_list)/len(pnl_list),2) if pnl_list else 0
-    total_pnl = round(sum(pnl_list),2) if pnl_list else 0
-    stats_1d = {"wins":0,"losses":0,"total":0}
-    stats_3d = {"wins":0,"losses":0,"total":0}
-    for l in closed:
-        hd = l.get("hold_days",3)
-        if hd==1:
-            stats_1d["total"]+=1
-            if l["status"]=="WIN": stats_1d["wins"]+=1
-            else: stats_1d["losses"]+=1
-        else:
-            stats_3d["total"]+=1
-            if l["status"]=="WIN": stats_3d["wins"]+=1
-            else: stats_3d["losses"]+=1
-    return {"total":len(logs),"closed":len(closed),"wins":len(wins),"losses":len(losses),"opens":len([l for l in logs if l["status"]=="OPEN"]),
-            "win_rate":win_rate,"avg_pnl":avg_pnl,"total_pnl":total_pnl,"stats_1d":stats_1d,"stats_3d":stats_3d}
+            pnls.append((float(l["exit_price"]) - float(l["entry"])) / float(l["entry"]) * 100)
+    return {
+        "total": len(logs), "closed": len(closed), "open": len(logs) - len(closed),
+        "wins": len(wins), "losses": len(closed) - len(wins),
+        "win_rate": round(len(wins)/len(closed)*100, 1) if closed else 0,
+        "avg_pnl": round(sum(pnls)/len(pnls), 2) if pnls else 0,
+        "total_pnl": round(sum(pnls), 2) if pnls else 0,
+    }
 
-# ==================================================
-# HEADER & MARKET PULSE
-# ==================================================
+# ─────────────────────────────────────────────
+# HEADER
+# ─────────────────────────────────────────────
 st.markdown("""
-<h1 style='text-align:center;color:#00bbff;'>⚡ IDX TERMINAL v6 — REKOMENDASI HARIAN</h1>
-<p style='text-align:center;color:#445566;'>Entry Teknikal · Auto Win/Loss Tracker · 10 Rekomendasi Terbaik</p>
+<h1 style='text-align:center; color:#00bbff; margin-bottom:4px;'>⚡ IDX TERMINAL v7</h1>
+<p style='text-align:center; color:#445566; margin-bottom:1rem;'>
+Regime-Aware Scoring · Volume Direction · RSI Divergence · Win/Loss Tracker
+</p>
 """, unsafe_allow_html=True)
 
-notifications = auto_resolve_all_trades()
-if notifications:
-    st.markdown("---### 🔔 Update Otomatis Trade")
-    for n in notifications[:3]:
-        st.write(f"{n['ticker']} → {n['status']} ({n['pnl_pct']:+.2f}%)")
-    st.markdown("---")
+auto_resolve()
 
-col_ihsg, col_sector = st.columns([1,1])
-ihsg_df = pd.DataFrame(); ihsg_change=0.0
-with col_ihsg:
-    st.subheader("📈 IHSG Market Pulse")
-    raw = yf.download("^JKSE",period="1y",progress=False); ihsg_df=clean_df(raw)
-    if not ihsg_df.empty:
-        ihsg_change=((ihsg_df['close'].iloc[-1]-ihsg_df['close'].iloc[-2])/ihsg_df['close'].iloc[-2])*100
-        ihsg_df['ma20']=ihsg_df['close'].rolling(20).mean()
-        fig=go.Figure()
-        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['close'],fill='tozeroy',line_color='#00bbff'))
-        fig.add_trace(go.Scatter(x=ihsg_df.index,y=ihsg_df['ma20'],line=dict(color='orange',width=1.5,dash='dot')))
-        fig.update_layout(height=230,template='plotly_dark',margin=dict(l=0,r=0,t=0,b=0),showlegend=False)
-        st.plotly_chart(fig,use_container_width=True)
-        ca,cb,cc,cd=st.columns(4)
-        ca.metric("Last",f"{ihsg_df['close'].iloc[-1]:,.0f}")
-        cb.metric("Change",f"{ihsg_change:+.2f}%")
-        cc.metric("52W High",f"{ihsg_df['high'].max():,.0f}")
-        cd.metric("52W Low",f"{ihsg_df['low'].min():,.0f}")
+# ─────────────────────────────────────────────
+# TABS
+# ─────────────────────────────────────────────
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📈  Market Overview",
+    "🎯  Smart Scanner",
+    "🔬  Deep Analysis",
+    "📊  Win/Loss Tracker"
+])
 
-with col_sector:
-    st.subheader("🗺️ Sectoral Heatmap (5D)")
-    sec_data=[]
-    for s,t in SECTOR_PROXY.items():
-        try:
-            d=clean_df(yf.download(f"{t}.JK",period="10d",progress=False))
-            if not d.empty and len(d)>=5:
-                perf=((d['close'].iloc[-1]-d['close'].iloc[-5])/d['close'].iloc[-5])*100
-                sec_data.append({"Sektor":s,"Perf":round(safe_float(perf),2),"Parent":"IDX","Size":10})
-        except: continue
-    if sec_data:
-        df_s=pd.DataFrame(sec_data)
-        fig=px.treemap(df_s,path=['Parent','Sektor'],values='Size',color='Perf',color_continuous_scale='RdYlGn',range_color=[-3,3])
-        fig.update_layout(height=230,margin=dict(l=0,r=0,t=0,b=0),template='plotly_dark')
-        st.plotly_chart(fig,use_container_width=True)
-        best=max(sec_data,key=lambda x:x['Perf']); worst=min(sec_data,key=lambda x:x['Perf'])
-        bias = "🟢 BULLISH" if ihsg_change>0.3 else ("🔴 BEARISH" if ihsg_change<-0.3 else "🟡 SIDEWAYS")
-        st.caption(f"Market Bias: **{bias}** | 🏆 {best['Sektor']} ({best['Perf']:+.2f}%) | ⚠️ {worst['Sektor']} ({worst['Perf']:+.2f}%)")
+# ══════════════════════════════════════════════
+# TAB 1 — MARKET OVERVIEW
+# ══════════════════════════════════════════════
+with tab1:
+    col_ihsg, col_sector = st.columns([1, 1])
 
-st.divider()
+    with col_ihsg:
+        st.subheader("IHSG — Market Pulse")
+        raw = clean_df(yf.download("^JKSE", period="1y", progress=False))
+        ihsg_change = 0.0
+        if not raw.empty:
+            ihsg_change = (raw['close'].iloc[-1] - raw['close'].iloc[-2]) / raw['close'].iloc[-2] * 100
+            raw['ma20'] = raw['close'].rolling(20).mean()
+            raw['ma50'] = raw['close'].rolling(50).mean()
 
-# ==================================================
-# DEEP ANALYSIS (single ticker) dengan calc_sr
-# ==================================================
-st.subheader("🔬 Deep Analysis — Single Ticker")
-inp1,inp2,inp3 = st.columns([1,2,1])
-with inp1:
-    manual = st.text_input("🔍 Kode (contoh: BBRI)","").upper()
-with inp2:
-    sec_sel = st.selectbox("📂 Pilih Sektor:",["—"]+list(MANUAL_SECTORS.keys()))
-with inp3:
-    tf = st.selectbox("📅 Timeframe:",["6mo","1y","2y"],index=1)
-
-target=None
-if manual:
-    target=manual if manual.endswith(".JK") else f"{manual}.JK"
-elif sec_sel!="—":
-    pick=st.selectbox("Pilih Saham:", add_jk(MANUAL_SECTORS[sec_sel]))
-    target=pick
-
-if target:
-    with st.spinner(f"Menganalisis {target}..."):
-        df=analyze_full(target, period=tf)
-    if df is not None:
-        score,detail=score_ticker(df)
-        entry, sl, tp, rr, signal, _ = get_technical_levels(df, score)
-        if entry is None:
-            st.warning("Gagal hitung level teknikal.")
-        else:
-            l=df.iloc[-1]
-            cl=safe_float(l['close']); rsi=safe_float(l['rsi'])
-            e20=safe_float(l['ema20']); e50=safe_float(l['ema50'])
-            pats=detect_patterns(df)
-            vr, vlbl, vsurge_light, vsurge_strong = volume_analysis(df)
-            res,sup = calc_sr(df)   # <--- fungsi calc_sr sudah ditambahkan
-            
-            st.markdown(f"### {target}")
-            c1,c2,c3,c4,c5 = st.columns(5)
-            c1.metric("Score", f"{score}/100")
-            c2.metric("Signal", signal)
-            c3.metric("RSI", f"{rsi:.1f}")
-            c4.metric("Volume", vlbl)
-            c5.metric("Close", f"{cl:,.0f}")
-            
-            st.markdown(f"""
-            <div style='background:#0a1428; border-radius:10px; padding:15px; margin:10px 0'>
-                <b>💡 Rekomendasi Entry:</b> Rp {entry:,.0f}<br>
-                <b>🛑 Stop Loss:</b> Rp {sl:,.0f} ({(entry-sl)/entry*100:.1f}%)<br>
-                <b>🎯 Take Profit:</b> Rp {tp:,.0f} ({(tp-entry)/entry*100:.1f}%)<br>
-                <b>⚖️ Risk/Reward:</b> 1:{rr}<br>
-                <b>📊 Pola Candlestick:</b> {pats[0] if pats else '—'}<br>
-                <b>📈 Support/Resistance:</b> S: {', '.join([str(int(s)) for s in sup[:2]])} | R: {', '.join([str(int(r)) for r in res[:2]])}
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Chart sederhana
-            fig = make_subplots(rows=2, cols=1, shared_xaxes=True, row_heights=[0.7,0.3])
-            fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'], low=df['low'], close=df['close'],
-                                         increasing_line_color='#00ff99', decreasing_line_color='#ff4466'), row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'], line=dict(color='orange', width=1.5)), row=1, col=1)
-            fig.add_hline(y=sl, line_dash="dash", line_color="#ff4466", annotation_text=f"SL {sl:,.0f}", row=1, col=1)
-            fig.add_hline(y=tp, line_dash="dash", line_color="#00ff99", annotation_text=f"TP {tp:,.0f}", row=1, col=1)
-            fig.add_hline(y=entry, line_dash="dot", line_color="#ffcc00", annotation_text=f"Entry {entry:,.0f}", row=1, col=1)
-            fig.add_trace(go.Scatter(x=df.index, y=df['rsi'], line=dict(color='#bb77ff')), row=2, col=1)
-            fig.add_hline(y=70, line_dash="dot", line_color="red", row=2, col=1)
-            fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
-            fig.update_layout(height=500, template='plotly_dark', xaxis_rangeslider_visible=False)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(x=raw.index, y=raw['close'],
+                                     fill='tozeroy', fillcolor='rgba(0,187,255,0.08)',
+                                     line=dict(color='#00bbff', width=1.5), name="IHSG"))
+            fig.add_trace(go.Scatter(x=raw.index, y=raw['ma20'],
+                                     line=dict(color='orange', width=1, dash='dot'), name="MA20"))
+            fig.add_trace(go.Scatter(x=raw.index, y=raw['ma50'],
+                                     line=dict(color='#ff88aa', width=1, dash='dot'), name="MA50"))
+            fig.update_layout(height=250, template='plotly_dark',
+                              margin=dict(l=0,r=0,t=0,b=0), showlegend=False,
+                              xaxis_rangeslider_visible=False)
             st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning(f"Data tidak cukup untuk {target}.")
 
-st.divider()
+            ca, cb, cc, cd = st.columns(4)
+            ca.metric("Last",    f"{raw['close'].iloc[-1]:,.0f}")
+            cb.metric("Change",  f"{ihsg_change:+.2f}%",
+                      delta_color="normal" if ihsg_change >= 0 else "inverse")
+            cc.metric("52W High", f"{raw['high'].max():,.0f}")
+            cd.metric("52W Low",  f"{raw['low'].min():,.0f}")
 
-# ==================================================
-# SMART SCANNER - 10 REKOMENDASI TERBAIK
-# ==================================================
-st.subheader("🎯 Smart Scanner — Dapatkan 10 Rekomendasi Saham untuk Hari Esok")
-st.markdown("Pilih universe dan filter, klik scan. Sistem akan menampilkan **10 saham dengan score tertinggi** beserta entry, SL, TP, dan alasan.")
+            bias = "🟢 BULLISH" if ihsg_change > 0.3 else ("🔴 BEARISH" if ihsg_change < -0.3 else "🟡 SIDEWAYS")
+            st.caption(f"Market Bias hari ini: **{bias}**")
 
-sc1,sc2,sc3,sc4 = st.columns([2,1,1,1])
-with sc1:
-    idx_choice = st.selectbox("📊 Universe:", list(INDEX_UNIVERSE.keys()))
-with sc2:
-    also_sector = st.multiselect("➕ Sektor:", list(MANUAL_SECTORS.keys()))
-with sc3:
-    min_score = st.slider("Min Score:", 0, 100, 55)
-with sc4:
-    top_n = st.number_input("Top N:", 5, 50, 10, help="Tampilkan berapa banyak saham")
-
-hold_period = st.radio("⏱️ Hold Period (hari)", [1,3], index=1, horizontal=True, help="1 hari = exit besok, 3 hari = max 3 hari")
-is_all_bei = "ALL BEI" in idx_choice
-
-selected_universe = INDEX_UNIVERSE[idx_choice]
-extra_from_sector = []
-for sec in also_sector:
-    extra_from_sector.extend(MANUAL_SECTORS[sec])
-combined_universe = list(dict.fromkeys(selected_universe + extra_from_sector))
-
-col_info1, col_info2 = st.columns([3,1])
-with col_info1:
-    badge_html = " ".join([f"<span class='universe-badge'>{t}</span>" for t in combined_universe[:40]])
-    st.markdown(f"**Universe aktif: {len(combined_universe)} saham**<br>{badge_html}", unsafe_allow_html=True)
-with col_info2:
-    signal_filter = st.selectbox("Filter Signal:", ["Semua BUY", "Strong BUY Only", "Semua (incl HOLD)"])
-
-with st.expander("⚙️ Filter Tambahan (Advanced)", expanded=False):
-    fc1, fc2, fc3 = st.columns(3)
-    with fc1:
-        min_vol_ratio = st.slider("Min Volume Ratio:", 0.5, 3.0, 1.0, 0.1)
-        require_surge = st.checkbox("Wajib Volume Surge (≥1.5x)", value=False)
-    with fc2:
-        min_rsi = st.slider("RSI Min:", 10, 50, 30)
-        max_rsi = st.slider("RSI Max:", 50, 90, 70)
-    with fc3:
-        require_macd_bull = st.checkbox("Wajib MACD Bullish", value=False)
-        require_above_ema = st.checkbox("Wajib Price > EMA20", value=True)
-    if is_all_bei:
-        max_workers = st.slider("Thread Paralel:", 3, 20, 10, key="mw")
-        use_vol_prefilter = st.checkbox("Pre-filter volume", value=True)
-        min_avg_lot = st.slider("Min avg lot (ribuan):", 100, 2000, 500) if use_vol_prefilter else 500
-    else:
-        max_workers = 10
-        use_vol_prefilter = False
-        min_avg_lot = 500
-
-show_debug = st.checkbox("🐛 Debug Mode (tampilkan kenapa saham gugur)", value=False)
-
-if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
-    tickers_to_scan = add_jk(combined_universe)
-    prog = st.progress(0); status = st.empty()
-    start_time = time.time()
-    scan_params = (min_score, signal_filter, require_above_ema, min_vol_ratio, require_surge, require_macd_bull,
-                   min_rsi, max_rsi, min_avg_lot, use_vol_prefilter)
-    
-    if is_all_bei:
-        results, debug_log, errors = run_parallel_scan(tickers_to_scan, scan_params, max_workers=max_workers,
-                                                       progress_placeholder=prog, status_placeholder=status)
-    else:
-        results = []; debug_log = []; errors = 0
-        for i, t in enumerate(tickers_to_scan):
-            prog.progress((i+1)/len(tickers_to_scan))
-            status.markdown(f"🔍 Scanning **{t}** ... ({i+1}/{len(tickers_to_scan)}) | Candidates: {len(results)}")
-            ticker_name = t.replace(".JK","")
+    with col_sector:
+        st.subheader("Sectoral Heatmap — 5D")
+        sec_data = []
+        for s, proxy in SECTOR_PROXY.items():
             try:
-                d = analyze_full_cached(t, period="6mo")
-                if d is None or d.empty:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Data"})
-                    continue
-                last = d.iloc[-1]
-                rsi_q = safe_float(last.get('rsi',50)); cl_q = safe_float(last.get('close',0))
-                ema_q = safe_float(last.get('ema20',cl_q)); macd_v = safe_float(last.get('macd',0)); sig_v2 = safe_float(last.get('sig',0))
-                if not (min_rsi <= rsi_q <= max_rsi):
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"RSI"})
-                    continue
-                if require_above_ema and cl_q < ema_q:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"EMA20"})
-                    continue
-                sc_val, _ = score_ticker(d)
-                if sc_val < min_score:
-                    if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Score"})
-                    continue
-                entry, sl, tp, rr, sig, _ = get_technical_levels(d, sc_val)
-                if entry is None: continue
-                if "SELL" in sig or "WEAK" in sig: continue
-                if signal_filter=="Strong BUY Only" and "STRONG" not in sig: continue
-                if signal_filter=="Semua BUY" and "BUY" not in sig: continue
-                vr, vlbl, vsurge_light, _ = volume_analysis(d)
-                if require_surge and not vsurge_light: continue
-                if vr < min_vol_ratio: continue
-                if require_macd_bull and macd_v <= sig_v2: continue
-                pats = detect_patterns(d)
-                results.append({"Ticker":ticker_name,"Score":sc_val,"Signal":sig,"Price":int(entry),
-                                "RSI":round(rsi_q,1),"Vol":vlbl,"MACD":"✅" if macd_v>sig_v2 else "❌",
-                                "EMA20":"✅" if cl_q>=ema_q else f"⚠️{((cl_q-ema_q)/ema_q*100):.1f}%",
-                                "SL":int(sl),"TP":int(tp),"R:R":f"1:{rr}","Pattern":pats[0] if pats else "—"})
-            except Exception as e:
-                errors+=1
-                if show_debug: debug_log.append({"Ticker":ticker_name,"Gugur":"Exception","Alasan":str(e)})
-    
-    elapsed = time.time() - start_time
-    prog.empty(); status.empty()
-    st.caption(f"⏱️ Scan selesai dalam {elapsed:.1f} detik | {len(tickers_to_scan)} ticker | {errors} error")
-    
-    if show_debug and debug_log:
-        with st.expander("🐛 Debug Log - Saham yang gugur", expanded=False):
-            st.dataframe(pd.DataFrame(debug_log))
-    
-    if results:
-        df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(top_n)
-        # Simpan ke tracker
-        n_saved = save_scan_results_to_log(df_res, hold_days=hold_period)
-        if n_saved > 0:
-            st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker. Hasil WIN/LOSS akan muncul otomatis nanti.")
-        
-        st.markdown("## 🏆 10 REKOMENDASI SAHAM UNTUK HARI ESOK")
-        st.markdown(f"*Berdasarkan scan {datetime.now(TZ_JKT).strftime('%Y-%m-%d %H:%M')} WIB | Hold period: {hold_period} hari*")
-        
-        # Tabel utama
-        display_cols = ["Ticker","Score","Signal","Price","SL","TP","R:R","RSI","Vol","MACD","EMA20","Pattern"]
-        styled = df_res[display_cols].style.map(lambda x: 'background-color:#004422;color:#00ff99' if isinstance(x, (int,float)) and x>=70 else 
-                                                ('background-color:#332200;color:#ffcc00' if isinstance(x, (int,float)) and x>=55 else ''), subset=['Score'])
-        st.dataframe(styled, use_container_width=True, hide_index=True)
-        
-        # Tampilan kartu per saham (lebih mudah dibaca)
-        st.markdown("### 📋 Detail & Alasan Setiap Rekomendasi")
-        for idx, row in df_res.iterrows():
-            verdict = interpret_scanner_row(row, ihsg_change)
-            color_score = "#00ff99" if row['Score']>=70 else ("#ffcc00" if row['Score']>=55 else "#ff4466")
-            st.markdown(f"""
-            <div class='reco-card'>
-                <div class='reco-left'>
-                    <div style='font-size:20px; font-weight:900; color:#00bbff'>{row['Ticker']}</div>
-                    <div style='font-size:28px; font-weight:900; color:{color_score}'>{row['Score']}<span style='font-size:14px'>/100</span></div>
-                    <div><span class='{"tag-sbuy" if "STRONG" in row['Signal'] else "tag-buy"}'>{row['Signal']}</span></div>
+                d = clean_df(yf.download(jk(proxy), period="10d", progress=False))
+                if not d.empty and len(d) >= 5:
+                    perf = (d['close'].iloc[-1] - d['close'].iloc[-5]) / d['close'].iloc[-5] * 100
+                    sec_data.append({"Sektor": s, "Perf": round(sf(perf), 2), "Parent": "IDX", "Size": 10})
+            except: continue
+
+        if sec_data:
+            df_s = pd.DataFrame(sec_data)
+            fig  = px.treemap(df_s, path=['Parent','Sektor'], values='Size',
+                              color='Perf', color_continuous_scale='RdYlGn', range_color=[-3,3])
+            fig.update_layout(height=250, margin=dict(l=0,r=0,t=0,b=0), template='plotly_dark')
+            st.plotly_chart(fig, use_container_width=True)
+
+            best  = max(sec_data, key=lambda x: x['Perf'])
+            worst = min(sec_data, key=lambda x: x['Perf'])
+            st.caption(f"🏆 Terkuat: **{best['Sektor']}** ({best['Perf']:+.2f}%) &nbsp;|&nbsp; ⚠️ Terlemah: **{worst['Sektor']}** ({worst['Perf']:+.2f}%)")
+
+    st.divider()
+
+    # Top movers hari ini
+    st.subheader("🔥 Top Movers — LQ45 Hari Ini")
+    mover_data = []
+    prog_mv = st.progress(0)
+    for i, t in enumerate(LQ45):
+        try:
+            d = clean_df(yf.download(jk(t), period="5d", progress=False))
+            if not d.empty and len(d) >= 2:
+                chg = (d['close'].iloc[-1] - d['close'].iloc[-2]) / d['close'].iloc[-2] * 100
+                vol = sf(d['volume'].iloc[-1])
+                mover_data.append({"Ticker": t, "Change%": round(sf(chg), 2), "Volume": int(vol),
+                                   "Close": int(sf(d['close'].iloc[-1]))})
+        except: pass
+        prog_mv.progress((i+1) / len(LQ45))
+    prog_mv.empty()
+
+    if mover_data:
+        df_mv = pd.DataFrame(mover_data).sort_values("Change%", ascending=False)
+        top_gain = df_mv.head(5)
+        top_loss = df_mv.tail(5)
+        cg, cl_col = st.columns(2)
+        with cg:
+            st.markdown("**📈 Gainers**")
+            st.dataframe(top_gain[["Ticker","Change%","Close","Volume"]],
+                         use_container_width=True, hide_index=True)
+        with cl_col:
+            st.markdown("**📉 Losers**")
+            st.dataframe(top_loss.sort_values("Change%")[["Ticker","Change%","Close","Volume"]],
+                         use_container_width=True, hide_index=True)
+
+# ══════════════════════════════════════════════
+# TAB 2 — SMART SCANNER
+# ══════════════════════════════════════════════
+with tab2:
+    st.subheader("🎯 Smart Scanner — Rekomendasi Harian")
+
+    sc1, sc2, sc3 = st.columns([2, 1, 1])
+    with sc1:
+        idx_choice = st.selectbox("Universe:", list(UNIVERSES.keys()))
+    with sc2:
+        top_n = st.number_input("Top N:", 5, 30, 10)
+    with sc3:
+        hold_period = st.radio("Hold:", [1, 3], index=1, horizontal=True)
+
+    extra_sec = st.multiselect("Tambah sektor spesifik:", list(SECTORS.keys()))
+
+    col_f1, col_f2, col_f3, col_f4 = st.columns(4)
+    with col_f1:
+        min_score   = st.slider("Min Score:", 0, 100, 55)
+        sig_filter  = st.selectbox("Filter Signal:", ["Semua BUY", "Strong BUY", "BUY saja"])
+    with col_f2:
+        min_rsi  = st.slider("RSI Min:", 10, 60, 30)
+        max_rsi  = st.slider("RSI Max:", 50, 90, 72)
+    with col_f3:
+        min_vr     = st.slider("Min Vol Ratio:", 0.5, 3.0, 1.0, 0.1)
+        req_surge  = st.checkbox("Wajib Vol Surge")
+    with col_f4:
+        above_ema  = st.checkbox("Harga > EMA20", value=True)
+        req_macd   = st.checkbox("Wajib MACD Bullish")
+
+    universe = list(dict.fromkeys(
+        UNIVERSES[idx_choice] +
+        [t for s in extra_sec for t in SECTORS[s]]
+    ))
+    st.caption(f"Universe aktif: **{len(universe)} saham**")
+
+    if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
+        tickers = add_jk(universe)
+        params  = (min_score, sig_filter, above_ema, min_vr, req_surge, req_macd, min_rsi, max_rsi)
+        args    = [(t, *params) for t in tickers]
+
+        prog  = st.progress(0)
+        info  = st.empty()
+        results = []; done = 0
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+            futs = {ex.submit(scan_one, a): a[0] for a in args}
+            for fut in concurrent.futures.as_completed(futs):
+                done += 1
+                prog.progress(done / len(tickers))
+                info.markdown(f"⚡ {done}/{len(tickers)} | Kandidat: **{len(results)}**")
+                res, name, reason = fut.result()
+                if res: results.append(res)
+
+        prog.empty(); info.empty()
+
+        if not results:
+            st.warning("Tidak ada saham yang lolos filter. Coba turunkan min score.")
+        else:
+            df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(top_n)
+            n_saved = save_scan_to_log(df_res, hold_period)
+            if n_saved:
+                st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
+
+            st.markdown(f"### 🏆 Top {len(df_res)} Rekomendasi — {datetime.now(TZ_JKT).strftime('%d %b %Y %H:%M')} WIB")
+
+            # Tabel ringkas
+            show_cols = ["Ticker","Score","Regime","Signal","Entry","SL","TP","R:R","RSI","Vol","MACD","Div","Pattern"]
+            st.dataframe(df_res[show_cols], use_container_width=True, hide_index=True)
+
+            # Detail cards
+            st.markdown("---")
+            st.markdown("#### 📋 Detail & Reasoning")
+            for _, row in df_res.iterrows():
+                score_c = "#00ff99" if row['Score']>=70 else ("#ffcc00" if row['Score']>=55 else "#ff4466")
+                regime_badge = (f"<span class='regime-trend'>{row['Regime']}</span>" if row['Regime']=="Trending"
+                                else f"<span class='regime-range'>{row['Regime']}</span>" if row['Regime']=="Ranging"
+                                else f"<span class='regime-transit'>{row['Regime']}</span>")
+                sig_class = "tag-sbuy" if "STRONG" in row['Signal'] else ("tag-sell" if "AVOID" in row['Signal'] else "tag-buy")
+                vol_warn = " ⚠️ <i>Volume distribusi — hati-hati!</i>" if row.get('VolType','') in ('surge_bear','bear') else ""
+                div_note = " | 🔼 <b>RSI Bullish Divergence!</b>" if row['Div']=="🔼" else ""
+
+                st.markdown(f"""
+                <div class='reco-card'>
+                    <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px'>
+                        <div>
+                            <span style='font-size:22px; font-weight:900; color:#00bbff'>{row['Ticker']}</span>
+                            &nbsp; <span class='{sig_class}'>{row['Signal']}</span>
+                            &nbsp; {regime_badge}
+                            <div style='font-size:30px; font-weight:900; color:{score_c}; line-height:1.2'>{row['Score']}<span style='font-size:14px; color:#667'>/100</span></div>
+                        </div>
+                        <div style='font-size:13px; color:#aac; text-align:right'>
+                            <b>Entry:</b> {row['Entry']:,} &nbsp; <b>SL:</b> {row['SL']:,} &nbsp; <b>TP:</b> {row['TP']:,} &nbsp; <b>R:R</b> {row['R:R']}<br>
+                            <b>RSI:</b> {row['RSI']} &nbsp; <b>ADX:</b> {row['ADX']} &nbsp; <b>MACD:</b> {row['MACD']} &nbsp; <b>Vol:</b> {row['Vol']}<br>
+                            <b>Pola:</b> {row['Pattern']} &nbsp; <b>Divergence:</b> {row['Div']}<br>
+                            {vol_warn}{div_note}
+                        </div>
+                    </div>
                 </div>
-                <div class='reco-right'>
-                    <b>Entry:</b> {row['Price']:,} &nbsp;| <b>SL:</b> {row['SL']:,} &nbsp;| <b>TP:</b> {row['TP']:,} &nbsp;| <b>R:R</b> {row['R:R']}<br>
-                    <b>RSI:</b> {row['RSI']} &nbsp;| <b>Volume:</b> {row['Vol']} &nbsp;| <b>MACD:</b> {row['MACD']} &nbsp;| <b>EMA20:</b> {row['EMA20']}<br>
-                    <b>Pola:</b> {row['Pattern']}<br>
-                    <span style='color:#bbccff'>{verdict}</span>
+                """, unsafe_allow_html=True)
+
+            # Score bar chart
+            fig_bar = go.Figure()
+            fig_bar.add_trace(go.Bar(
+                x=df_res['Ticker'], y=df_res['Score'],
+                marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
+                text=df_res['Score'], textposition='outside'
+            ))
+            fig_bar.add_hline(y=70, line_dash="dot", line_color="#00ff99", annotation_text="Strong Buy ≥70")
+            fig_bar.add_hline(y=55, line_dash="dot", line_color="#ffcc00", annotation_text="Buy ≥55")
+            fig_bar.update_layout(height=280, template='plotly_dark',
+                                  title="Distribusi Score", margin=dict(l=0,r=0,t=30,b=0))
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+# ══════════════════════════════════════════════
+# TAB 3 — DEEP ANALYSIS
+# ══════════════════════════════════════════════
+with tab3:
+    st.subheader("🔬 Deep Analysis — Single Ticker")
+
+    da1, da2, da3 = st.columns([1, 2, 1])
+    with da1:
+        ticker_input = st.text_input("Kode Saham:", "BBRI").upper()
+    with da2:
+        sector_sel = st.selectbox("Atau pilih dari sektor:", ["—"] + list(SECTORS.keys()))
+    with da3:
+        tf = st.selectbox("Timeframe:", ["3mo","6mo","1y","2y"], index=2)
+
+    target = None
+    if ticker_input:
+        target = jk(ticker_input)
+    if sector_sel != "—":
+        pick = st.selectbox("Saham:", add_jk(SECTORS[sector_sel]))
+        target = pick
+
+    if target and st.button("🔍 Analisis", type="primary"):
+        with st.spinner(f"Menganalisis {target}..."):
+            df = fetch_df(target, period=tf)
+
+        if df is None:
+            st.error("Data tidak cukup. Coba timeframe lebih panjang.")
+        else:
+            score, detail, regime, adx_v = score_ticker(df)
+            entry, sl, tp, rr, signal, sig_col = get_levels(df, score, regime)
+            last  = df.iloc[-1]
+            cl    = sf(last['close']); rsi = sf(last['rsi'])
+            e20   = sf(last['ema20']); e50 = sf(last['ema50'])
+            adx   = sf(last['adx'])
+            pats  = detect_patterns(df)
+            _, vol_lbl, vol_type = volume_score(df)
+            div   = detect_rsi_divergence(df)
+
+            # Regime badge
+            if regime == "trending":
+                rbadge = f"<span class='regime-trend'>📈 TRENDING (ADX {adx:.0f})</span>"
+            elif regime == "ranging":
+                rbadge = f"<span class='regime-range'>↔️ RANGING (ADX {adx:.0f})</span>"
+            else:
+                rbadge = f"<span class='regime-transit'>🔄 TRANSITION (ADX {adx:.0f})</span>"
+
+            # Metrics row
+            m1, m2, m3, m4, m5, m6 = st.columns(6)
+            m1.metric("Score",  f"{score}/100")
+            m2.metric("Signal", signal)
+            m3.metric("RSI",    f"{rsi:.1f}")
+            m4.metric("ADX",    f"{adx:.1f}")
+            m5.metric("Volume", vol_lbl)
+            m6.metric("Close",  f"{cl:,.0f}")
+
+            st.markdown(rbadge, unsafe_allow_html=True)
+            if div == "bullish":
+                st.success("🔼 RSI Bullish Divergence terdeteksi! Potential reversal kuat.")
+            elif div == "bearish":
+                st.warning("🔽 RSI Bearish Divergence — hati-hati potensi turun.")
+            if vol_type in ("surge_bear", "bear"):
+                st.error("⚠️ Volume surge tapi candle merah — distribusi institusi, hati-hati!")
+
+            # Trade plan box
+            if entry:
+                st.markdown(f"""
+                <div style='background:#0a1428; border-radius:10px; padding:16px; margin:12px 0;
+                            border-left:4px solid {sig_col}'>
+                    <div style='font-size:18px; font-weight:700; color:{sig_col}; margin-bottom:8px'>{signal}</div>
+                    <table style='width:100%; font-size:14px; color:#ccd'>
+                        <tr><td style='padding:4px 0; color:#889'>💡 Entry</td>
+                            <td><b>Rp {entry:,}</b></td>
+                            <td style='color:#889'>📐 Regime</td>
+                            <td><b>{regime.title()} | ADX {adx:.0f}</b></td></tr>
+                        <tr><td style='color:#889'>🛑 Stop Loss</td>
+                            <td><b style='color:#ff4466'>Rp {sl:,}</b> ({(entry-sl)/entry*100:.1f}%)</td>
+                            <td style='color:#889'>📊 RSI Div</td>
+                            <td><b>{"🔼 Bullish" if div=="bullish" else ("🔽 Bearish" if div=="bearish" else "—")}</b></td></tr>
+                        <tr><td style='color:#889'>🎯 Take Profit</td>
+                            <td><b style='color:#00ff99'>Rp {tp:,}</b> (+{(tp-entry)/entry*100:.1f}%)</td>
+                            <td style='color:#889'>⚖️ Risk/Reward</td>
+                            <td><b>1:{rr}</b></td></tr>
+                        <tr><td style='color:#889'>🕯 Pola</td>
+                            <td colspan=3><b>{pats[0] if pats else "—"}</b></td></tr>
+                    </table>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Tampilkan juga grafik distribusi score
-        fig_dist = go.Figure()
-        fig_dist.add_trace(go.Bar(x=df_res['Ticker'], y=df_res['Score'],
-                                  marker_color=['#00ff99' if s>=70 else ('#ffcc00' if s>=55 else '#ff4466') for s in df_res['Score']],
-                                  text=df_res['Score'], textposition='outside'))
-        fig_dist.add_hline(y=70, line_dash="dot", line_color="#00ff99", annotation_text="Strong Buy Zone")
-        fig_dist.add_hline(y=55, line_dash="dot", line_color="#ffcc00", annotation_text="Buy Zone")
-        fig_dist.update_layout(height=300, template='plotly_dark', title="Distribusi Score Rekomendasi")
-        st.plotly_chart(fig_dist, use_container_width=True)
-        
+                """, unsafe_allow_html=True)
+
+            # Score breakdown
+            with st.expander("📐 Score Breakdown"):
+                st.json(detail)
+
+            # Chart
+            fig = make_subplots(rows=3, cols=1, shared_xaxes=True,
+                                row_heights=[0.55, 0.25, 0.20],
+                                subplot_titles=["Harga", "RSI + ADX", "Volume"])
+            # Candles
+            fig.add_trace(go.Candlestick(x=df.index, open=df['open'], high=df['high'],
+                                          low=df['low'], close=df['close'],
+                                          increasing_line_color='#00ff99',
+                                          decreasing_line_color='#ff4466',
+                                          name="OHLC"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['ema20'],
+                                     line=dict(color='orange', width=1.2), name="EMA20"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['ema50'],
+                                     line=dict(color='#8888ff', width=1.2), name="EMA50"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['bb_u'],
+                                     line=dict(color='#336699', width=0.8, dash='dot'), name="BB Upper"), row=1, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['bb_l'],
+                                     line=dict(color='#336699', width=0.8, dash='dot'),
+                                     fill='tonexty', fillcolor='rgba(51,102,153,0.05)', name="BB Lower"), row=1, col=1)
+            if entry:
+                fig.add_hline(y=sl,    line_dash="dash", line_color="#ff4466",
+                              annotation_text=f"SL {sl:,}", row=1, col=1)
+                fig.add_hline(y=tp,    line_dash="dash", line_color="#00ff99",
+                              annotation_text=f"TP {tp:,}", row=1, col=1)
+                fig.add_hline(y=entry, line_dash="dot",  line_color="#ffcc00",
+                              annotation_text=f"Entry {entry:,}", row=1, col=1)
+            # RSI
+            fig.add_trace(go.Scatter(x=df.index, y=df['rsi'],
+                                     line=dict(color='#bb77ff', width=1.5), name="RSI"), row=2, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['adx'],
+                                     line=dict(color='#ffaa33', width=1.2, dash='dot'), name="ADX"), row=2, col=1)
+            fig.add_hline(y=70, line_dash="dot", line_color="red",   row=2, col=1)
+            fig.add_hline(y=30, line_dash="dot", line_color="green", row=2, col=1)
+            fig.add_hline(y=25, line_dash="dot", line_color="#ffaa33", annotation_text="ADX 25", row=2, col=1)
+            # Volume
+            colors_vol = ['#00ff99' if c >= o else '#ff4466'
+                          for c, o in zip(df['close'], df['open'])]
+            fig.add_trace(go.Bar(x=df.index, y=df['volume'],
+                                 marker_color=colors_vol, name="Volume"), row=3, col=1)
+            fig.add_trace(go.Scatter(x=df.index, y=df['vol_ma20'],
+                                     line=dict(color='yellow', width=1), name="Vol MA20"), row=3, col=1)
+
+            fig.update_layout(height=620, template='plotly_dark',
+                              xaxis_rangeslider_visible=False,
+                              margin=dict(l=0,r=0,t=30,b=0), showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+
+# ══════════════════════════════════════════════
+# TAB 4 — WIN/LOSS TRACKER
+# ══════════════════════════════════════════════
+with tab4:
+    st.subheader("📊 Win/Loss Tracker")
+    logs = load_log()
+
+    if not logs:
+        st.info("📭 Belum ada data. Jalankan scanner untuk menghasilkan rekomendasi.")
     else:
-        st.warning("❌ Tidak ada saham yang memenuhi kriteria. Coba turunkan min score atau perlonggar filter.")
+        stats = tracker_stats(logs)
+        c1,c2,c3,c4,c5,c6 = st.columns(6)
+        c1.metric("Win Rate",   f"{stats['win_rate']}%")
+        c2.metric("✅ Menang",   stats['wins'])
+        c3.metric("❌ Kalah",    stats['losses'])
+        c4.metric("⏳ Open",     stats['open'])
+        c5.metric("Avg P&L",    f"{stats['avg_pnl']:+.2f}%")
+        c6.metric("Total P&L",  f"{stats['total_pnl']:+.2f}%")
 
-st.divider()
+        # Win rate chart
+        if stats['closed'] > 0:
+            fig_wr = go.Figure(go.Pie(
+                values=[stats['wins'], stats['losses']],
+                labels=["WIN","LOSS"],
+                marker_colors=['#00ff99','#ff4466'],
+                hole=0.6,
+                textinfo='label+percent'
+            ))
+            fig_wr.update_layout(height=200, template='plotly_dark',
+                                 margin=dict(l=0,r=0,t=0,b=0), showlegend=False)
+            col_pie, col_empty = st.columns([1,2])
+            with col_pie:
+                st.plotly_chart(fig_wr, use_container_width=True)
 
-# ==================================================
-# WIN/LOSS TRACKER (ringkas)
-# ==================================================
-st.subheader("📊 Win/Loss Tracker - Riwayat Rekomendasi")
-logs = load_trade_log()
-if not logs:
-    st.info("📭 Belum ada data. Jalankan scanner di atas untuk menghasilkan rekomendasi.")
-else:
-    stats = compute_tracker_stats(logs)
-    col1, col2, col3, col4, col5, col6 = st.columns(6)
-    col1.metric("Win Rate", f"{stats['win_rate']}%")
-    col2.metric("✅ Menang", stats['wins'])
-    col3.metric("❌ Kalah", stats['losses'])
-    col4.metric("⏳ Open", stats['opens'])
-    col5.metric("Avg P&L", f"{stats['avg_pnl']:+.2f}%")
-    col6.metric("Total P&L", f"{stats['total_pnl']:+.2f}%")
-    
-    # Tampilkan open trades
-    open_trades = [l for l in logs if l["status"] == "OPEN"]
-    if open_trades:
-        st.markdown("#### 🔄 Trade yang masih berjalan")
-        for trade in open_trades:
-            target_date = date.fromisoformat(trade["date"])
-            hold_days = trade.get("hold_days",3)
-            entry, sl, tp = float(trade["entry"]), float(trade["sl"]), float(trade["tp"])
-            status, curr_price, _, action, _, days_held, _, _ = evaluate_trade_progress(
-                trade["ticker"], entry, sl, tp, target_date, hold_days
-            )
-            if status != "OPEN":
-                trade["status"] = status
-                trade["exit_price"] = curr_price
-                trade["auto_resolved"] = True
-                save_trade_log(logs)
+        # Open trades
+        open_trades = [l for l in logs if l["status"] == "OPEN"]
+        if open_trades:
+            st.markdown("#### 🔄 Trade Aktif")
+            for trade in open_trades:
+                status, curr, days, action, pnl = eval_trade(trade)
+                pnl_color = "#00ff99" if pnl >= 0 else "#ff4466"
+                if status != "OPEN":
+                    for t in logs:
+                        if t["id"] == trade["id"]:
+                            t.update({"status": status, "exit_price": curr,
+                                      "exit_date": str(datetime.now(TZ_JKT).date())})
+                    save_log(logs)
+                    st.rerun()
+                st.markdown(f"""
+                <div class='trade-row'>
+                    <b style='color:#00bbff'>{trade['ticker']}</b>
+                    &nbsp;|&nbsp; Entry: <b>{float(trade['entry']):,.0f}</b>
+                    &nbsp;|&nbsp; SL: <b style='color:#ff4466'>{float(trade['sl']):,.0f}</b>
+                    &nbsp;|&nbsp; TP: <b style='color:#00ff99'>{float(trade['tp']):,.0f}</b>
+                    &nbsp;|&nbsp; Now: <b>{curr:,.0f}</b>
+                    &nbsp;|&nbsp; P&L: <b style='color:{pnl_color}'>{pnl:+.2f}%</b>
+                    &nbsp;|&nbsp; {action}
+                    &nbsp;|&nbsp; <span style='color:#889'>D{days}/{trade.get('hold_days',3)}</span>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # History table
+        closed = [l for l in logs if l["status"] != "OPEN"]
+        if closed:
+            st.markdown("#### 📜 Riwayat Tertutup")
+            df_hist = pd.DataFrame(closed)[
+                ["date","ticker","signal","score","entry","sl","tp","exit_price","status","note","hold_days"]
+            ].sort_values("date", ascending=False)
+            st.dataframe(df_hist, use_container_width=True, hide_index=True)
+
+        col_dl, col_reset = st.columns([3,1])
+        with col_dl:
+            st.download_button("⬇️ Download CSV",
+                               pd.DataFrame(logs).to_csv(index=False).encode("utf-8"),
+                               "idx_trade_log.csv", "text/csv")
+        with col_reset:
+            if st.button("🗑️ Reset Semua Data", type="secondary"):
+                save_log([])
                 st.rerun()
-            st.markdown(f"- **{trade['ticker']}** | Entry {entry:,.0f} | SL {sl:,.0f} | TP {tp:,.0f} | Current {curr_price:,.0f} | {action} | Hari {days_held}/{hold_days}")
-    
-    st.download_button("⬇️ Download Log CSV", pd.DataFrame(logs).to_csv(index=False).encode("utf-8"), "idx_trade_log.csv")
