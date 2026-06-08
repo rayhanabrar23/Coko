@@ -627,9 +627,9 @@ def tracker_stats(logs):
 # HEADER
 # ─────────────────────────────────────────────
 st.markdown("""
-<h1 style='text-align:center; color:#00bbff; margin-bottom:4px;'>⚡ IDX TERMINAL v7</h1>
+<h1 style='text-align:center; color:#00bbff; margin-bottom:4px; letter-spacing:2px;'>IDX TERMINAL v7</h1>
 <p style='text-align:center; color:#445566; margin-bottom:1rem;'>
-Regime-Aware Scoring · Volume Direction · RSI Divergence · Win/Loss Tracker
+Regime-Aware Scoring &nbsp;·&nbsp; Volume Direction &nbsp;·&nbsp; RSI Divergence &nbsp;·&nbsp; Pre-Market IEP Check
 </p>
 """, unsafe_allow_html=True)
 
@@ -638,11 +638,12 @@ auto_resolve()
 # ─────────────────────────────────────────────
 # TABS
 # ─────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📈  Market Overview",
-    "🎯  Smart Scanner",
-    "🔬  Deep Analysis",
-    "📊  Win/Loss Tracker"
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "Market Overview",
+    "Smart Scanner",
+    "Deep Analysis",
+    "Pre-Market Check",
+    "Win/Loss Tracker",
 ])
 
 # ══════════════════════════════════════════════
@@ -708,7 +709,7 @@ with tab1:
     st.divider()
 
     # Top movers hari ini
-    st.subheader("🔥 Top Movers — LQ45 Hari Ini")
+    st.subheader("Top Movers — LQ45 Hari Ini")
     mover_data = []
     prog_mv = st.progress(0)
     for i, t in enumerate(LQ45):
@@ -741,7 +742,7 @@ with tab1:
 # TAB 2 — SMART SCANNER
 # ══════════════════════════════════════════════
 with tab2:
-    st.subheader("🎯 Smart Scanner — Rekomendasi Harian")
+    st.subheader("Smart Scanner — Rekomendasi Harian")
 
     sc1, sc2, sc3 = st.columns([2, 1, 1])
     with sc1:
@@ -801,7 +802,7 @@ with tab2:
             if n_saved:
                 st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
 
-            st.markdown(f"### 🏆 Top {len(df_res)} Rekomendasi — {datetime.now(TZ_JKT).strftime('%d %b %Y %H:%M')} WIB")
+            st.markdown(f"### Top {len(df_res)} Rekomendasi — {datetime.now(TZ_JKT).strftime('%d %b %Y %H:%M')} WIB")
 
             # Tabel ringkas
             show_cols = ["Ticker","Score","Regime","Signal","Entry","SL","TP","R:R","RSI","Vol","MACD","Div","Pattern"]
@@ -809,7 +810,7 @@ with tab2:
 
             # Detail cards
             st.markdown("---")
-            st.markdown("#### 📋 Detail & Reasoning")
+            st.markdown("#### Detail & Reasoning")
             for _, row in df_res.iterrows():
                 score_c = "#00ff99" if row['Score']>=70 else ("#ffcc00" if row['Score']>=55 else "#ff4466")
                 regime_badge = (f"<span class='regime-trend'>{row['Regime']}</span>" if row['Regime']=="Trending"
@@ -855,7 +856,7 @@ with tab2:
 # TAB 3 — DEEP ANALYSIS
 # ══════════════════════════════════════════════
 with tab3:
-    st.subheader("🔬 Deep Analysis — Single Ticker")
+    st.subheader("Deep Analysis — Single Ticker")
 
     da1, da2, da3 = st.columns([1, 2, 1])
     with da1:
@@ -991,10 +992,266 @@ with tab3:
             st.plotly_chart(fig, use_container_width=True)
 
 # ══════════════════════════════════════════════
-# TAB 4 — WIN/LOSS TRACKER
+# TAB 4 — PRE-MARKET CHECK
 # ══════════════════════════════════════════════
 with tab4:
-    st.subheader("📊 Win/Loss Tracker")
+    st.subheader("Pre-Market Check — IEP Adjustment")
+    st.caption("Masukkan IEP (Indicative Equilibrium Price) dari Ajaib sebelum market buka. "
+               "Sistem akan recalculate entry, SL, TP, dan beri keputusan GO / SKIP / WAIT.")
+
+    st.divider()
+
+    # ── Load watchlist dari hasil scanner (open trades) ──
+    logs_pm   = load_log()
+    open_pm   = [l for l in logs_pm if l["status"] == "OPEN"]
+    scan_date = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
+    today_pm  = [l for l in open_pm if l["date"] == scan_date]
+
+    # Biarkan user juga input manual ticker tambahan
+    st.markdown("#### Watchlist")
+    col_wl1, col_wl2 = st.columns([3, 1])
+    with col_wl1:
+        manual_tickers = st.text_input(
+            "Tambah ticker manual (pisahkan koma):",
+            placeholder="BBRI, TLKM, GOTO"
+        )
+    with col_wl2:
+        ihsg_open = st.number_input("IHSG Open estimasi:", value=0, step=10,
+                                    help="Isi kalau sudah ada IEP IHSG futures / pre-opening")
+
+    # Gabungkan dari tracker hari ini + manual input
+    base_rows = []
+    for t in today_pm:
+        base_rows.append({
+            "ticker":  t["ticker"],
+            "entry":   float(t["entry"]),
+            "sl":      float(t["sl"]),
+            "tp":      float(t["tp"]),
+            "score":   t.get("score", 0),
+            "signal":  t.get("signal", "—"),
+            "from":    "Scanner",
+        })
+
+    if manual_tickers:
+        for raw_t in manual_tickers.split(","):
+            t_clean = raw_t.strip().upper()
+            if not t_clean: continue
+            # Fetch data untuk hitung baseline level
+            df_pm = fetch_df(jk(t_clean), "6mo")
+            if df_pm is not None:
+                sc_pm, _, reg_pm, _ = score_ticker(df_pm)
+                e_pm, sl_pm, tp_pm, _, sig_pm, _ = get_levels(df_pm, sc_pm, reg_pm)
+                if e_pm:
+                    base_rows.append({
+                        "ticker": t_clean,
+                        "entry":  float(e_pm),
+                        "sl":     float(sl_pm),
+                        "tp":     float(tp_pm),
+                        "score":  sc_pm,
+                        "signal": sig_pm,
+                        "from":   "Manual",
+                    })
+            else:
+                base_rows.append({
+                    "ticker": t_clean,
+                    "entry":  0, "sl": 0, "tp": 0,
+                    "score":  0, "signal": "—", "from": "Manual (no data)",
+                })
+
+    if not base_rows:
+        st.info("Belum ada watchlist. Jalankan scanner dulu atau tambah ticker manual di atas.")
+    else:
+        st.divider()
+        st.markdown("#### Input IEP per Saham")
+        st.caption("Harga IEP terlihat di Ajaib pada fase Pre-Opening (08:45–09:00 WIB).")
+
+        iep_inputs = {}
+        prev_closes = {}
+
+        # Fetch previous close untuk hitung gap
+        for row in base_rows:
+            try:
+                d_prev = clean_df(yf.download(jk(row["ticker"]), period="5d", progress=False))
+                prev_closes[row["ticker"]] = sf(d_prev['close'].iloc[-1]) if not d_prev.empty else row["entry"]
+            except:
+                prev_closes[row["ticker"]] = row["entry"]
+
+        # Input grid
+        cols_per_row = 3
+        for i in range(0, len(base_rows), cols_per_row):
+            chunk = base_rows[i:i+cols_per_row]
+            cols  = st.columns(cols_per_row)
+            for col, row in zip(cols, chunk):
+                with col:
+                    prev_c = prev_closes.get(row["ticker"], row["entry"])
+                    iep_val = col.number_input(
+                        f"{row['ticker']}  (close: {prev_c:,.0f})",
+                        min_value=0,
+                        value=int(prev_c),
+                        step=1,
+                        key=f"iep_{row['ticker']}"
+                    )
+                    iep_inputs[row["ticker"]] = iep_val
+
+        st.divider()
+
+        if st.button("Hitung Ulang dengan IEP", type="primary", use_container_width=True):
+
+            st.markdown("#### Hasil Analisis Pre-Market")
+
+            for row in base_rows:
+                ticker  = row["ticker"]
+                iep     = iep_inputs.get(ticker, 0)
+                prev_c  = prev_closes.get(ticker, row["entry"])
+                entry_o = row["entry"]   # entry dari analisis semalam
+                sl_o    = row["sl"]
+                tp_o    = row["tp"]
+
+                if iep <= 0 or prev_c <= 0:
+                    continue
+
+                # ── Gap calculation ──────────────────────
+                gap_pct  = (iep - prev_c) / prev_c * 100
+                gap_type = ("gap_up"   if gap_pct >  1.0 else
+                            "gap_down" if gap_pct < -1.0 else "flat")
+
+                # ── Recalculate entry dari IEP ───────────
+                # Entry baru = IEP itu sendiri (kita beli di harga buka)
+                # tapi kalau gap up terlalu jauh, R:R bisa rusak
+                new_entry = iep
+
+                # SL: tetap proporsional dari entry baru
+                original_sl_dist_pct = (entry_o - sl_o) / entry_o if entry_o > 0 else 0.02
+                new_sl = round(new_entry * (1 - original_sl_dist_pct))
+
+                # TP: tetap di level resistance lama KECUALI sudah terlewat
+                if tp_o > new_entry:
+                    new_tp = tp_o   # resistance masih valid
+                else:
+                    # TP terlewat karena gap up terlalu jauh, hitung ulang
+                    new_tp = round(new_entry + (new_entry - new_sl) * 2.0)
+
+                new_risk   = new_entry - new_sl
+                new_reward = new_tp - new_entry
+                new_rr     = round(new_reward / new_risk, 2) if new_risk > 0 else 0
+
+                # ── Decision logic ───────────────────────
+                if gap_type == "gap_up":
+                    if gap_pct > 5:
+                        decision = "SKIP"
+                        reason   = f"Gap up {gap_pct:+.1f}% terlalu jauh. Setup rusak, R:R tidak layak."
+                        dec_color = "#ff4466"
+                    elif new_rr >= 1.5:
+                        decision = "GO"
+                        reason   = f"Gap up {gap_pct:+.1f}% wajar. R:R masih {new_rr} — layak entry di harga buka."
+                        dec_color = "#00ff99"
+                    else:
+                        decision = "WAIT"
+                        reason   = f"Gap up {gap_pct:+.1f}% memperburuk R:R jadi {new_rr}. Tunggu pullback ke {int(entry_o):,}."
+                        dec_color = "#ffcc00"
+
+                elif gap_type == "gap_down":
+                    if gap_pct < -5:
+                        decision = "SKIP"
+                        reason   = f"Gap down {gap_pct:+.1f}%. Potensi panic sell lanjutan. Tunggu hari lain."
+                        dec_color = "#ff4466"
+                    elif gap_pct < -2:
+                        decision = "WAIT"
+                        reason   = f"Gap down {gap_pct:+.1f}%. Tunggu stabilisasi 15–30 menit pertama sebelum entry."
+                        dec_color = "#ffcc00"
+                    else:
+                        decision = "GO"
+                        reason   = f"Gap down minor {gap_pct:+.1f}%. Entry lebih murah dari plan. R:R membaik jadi {new_rr}."
+                        dec_color = "#00ff99"
+
+                else:  # flat open
+                    if new_rr >= 1.5:
+                        decision = "GO"
+                        reason   = f"Open flat ({gap_pct:+.1f}%). Entry sesuai plan. R:R {new_rr}."
+                        dec_color = "#00ff99"
+                    else:
+                        decision = "WAIT"
+                        reason   = f"Open flat tapi R:R hanya {new_rr}. Entry lebih ideal di {int(entry_o):,}."
+                        dec_color = "#ffcc00"
+
+                # IHSG context
+                ihsg_note = ""
+                if ihsg_open > 0:
+                    # fetch ihsg prev close
+                    try:
+                        ihsg_prev = clean_df(yf.download("^JKSE", period="5d", progress=False))
+                        ihsg_prev_c = sf(ihsg_prev['close'].iloc[-1]) if not ihsg_prev.empty else 0
+                        ihsg_gap = (ihsg_open - ihsg_prev_c) / ihsg_prev_c * 100 if ihsg_prev_c > 0 else 0
+                        if ihsg_gap < -1.0:
+                            ihsg_note = f"  IHSG diestimasi gap down {ihsg_gap:+.1f}% — pertimbangkan sizing lebih kecil."
+                            if decision == "GO": decision = "WAIT"; dec_color = "#ffcc00"
+                        elif ihsg_gap > 0.5:
+                            ihsg_note = f"  IHSG gap up {ihsg_gap:+.1f}% — konfirmasi bullish market."
+                    except: pass
+
+                # ── Render card ──────────────────────────
+                border_color = dec_color
+                gap_label    = f"{gap_pct:+.1f}%"
+                gap_color    = "#00ff99" if gap_pct >= 0 else "#ff4466"
+
+                st.markdown(f"""
+                <div style='background:#0a1020; border-radius:12px; border-left:5px solid {border_color};
+                            padding:16px 20px; margin:10px 0;'>
+                    <div style='display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;'>
+                        <div>
+                            <span style='font-size:20px; font-weight:900; color:#00bbff;'>{ticker}</span>
+                            &nbsp;&nbsp;
+                            <span style='font-size:22px; font-weight:900; color:{dec_color};'>{decision}</span>
+                        </div>
+                        <div style='font-size:13px; color:#889;'>{row['from']} &nbsp;|&nbsp; Score: {row['score']}</div>
+                    </div>
+                    <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:8px; font-size:13px; margin-bottom:10px;'>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>IEP</div>
+                            <div style='font-weight:700; color:#fff;'>{iep:,}</div>
+                        </div>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>Gap vs Close</div>
+                            <div style='font-weight:700; color:{gap_color};'>{gap_label}</div>
+                        </div>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>Entry (IEP)</div>
+                            <div style='font-weight:700; color:#fff;'>{new_entry:,}</div>
+                        </div>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>R:R Baru</div>
+                            <div style='font-weight:700; color:{"#00ff99" if new_rr >= 2 else ("#ffcc00" if new_rr >= 1.5 else "#ff4466")};'>1:{new_rr}</div>
+                        </div>
+                    </div>
+                    <div style='display:grid; grid-template-columns:repeat(3,1fr); gap:8px; font-size:13px; margin-bottom:10px;'>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>Entry Semalam</div>
+                            <div style='font-weight:500; color:#aac;'>{int(entry_o):,}</div>
+                        </div>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>Stop Loss</div>
+                            <div style='font-weight:700; color:#ff4466;'>{new_sl:,}
+                                <span style='font-size:11px;'>({(new_entry-new_sl)/new_entry*100:.1f}%)</span>
+                            </div>
+                        </div>
+                        <div style='background:#0d1628; border-radius:8px; padding:8px; text-align:center;'>
+                            <div style='color:#667; font-size:11px; margin-bottom:2px;'>Take Profit</div>
+                            <div style='font-weight:700; color:#00ff99;'>{new_tp:,}
+                                <span style='font-size:11px;'>(+{(new_tp-new_entry)/new_entry*100:.1f}%)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style='font-size:13px; color:#ccd; background:#0d1628; border-radius:8px; padding:10px;'>
+                        {reason}{ihsg_note}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════
+# TAB 5 — WIN/LOSS TRACKER
+# ══════════════════════════════════════════════
+with tab5:
+    st.subheader("Win/Loss Tracker")
     logs = load_log()
 
     if not logs:
@@ -1027,7 +1284,7 @@ with tab4:
         # Open trades
         open_trades = [l for l in logs if l["status"] == "OPEN"]
         if open_trades:
-            st.markdown("#### 🔄 Trade Aktif")
+            st.markdown("#### Trade Aktif")
             for trade in open_trades:
                 status, curr, days, action, pnl = eval_trade(trade)
                 pnl_color = "#00ff99" if pnl >= 0 else "#ff4466"
@@ -1054,7 +1311,7 @@ with tab4:
         # History table
         closed = [l for l in logs if l["status"] != "OPEN"]
         if closed:
-            st.markdown("#### 📜 Riwayat Tertutup")
+            st.markdown("#### Riwayat Tertutup")
             df_hist = pd.DataFrame(closed)[
                 ["date","ticker","signal","score","entry","sl","tp","exit_price","status","note","hold_days"]
             ].sort_values("date", ascending=False)
