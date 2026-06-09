@@ -1410,21 +1410,23 @@ with tab2:
                     reasoning = ["— Data tidak tersedia —"]
 
                 # ── Build semua HTML fragments ──
-                sizing_html = f"""
-                <div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px;
-                            padding:12px 16px; margin:8px 0;'>
-                    <div style='font-size:12px; color:#00aa44; font-weight:700; margin-bottom:6px;'>
-                        💰 POSITION SIZING ({risk_per_trade*100:.1f}% risk dari Rp {modal_total:,.0f})
-                    </div>
-                    <div style='display:grid; grid-template-columns:repeat(4,1fr); gap:6px; font-size:12px;'>
-                        <div><span style='color:#667'>Max Lot</span><br><b style='color:#00ff99; font-size:16px'>{max_lot} lot</b></div>
-                        <div><span style='color:#667'>Nilai Posisi</span><br><b>Rp {pos_val:,.0f}</b></div>
-                        <div><span style='color:#667'>Risk (Rp)</span><br><b style='color:#ff8844'>Rp {actual_risk:,.0f}</b></div>
-                        <div><span style='color:#667'>Est. Biaya</span><br><b style='color:#ffcc00'>Rp {fee_total:,.0f}</b></div>
-                    </div>
-                </div>
-                """ if max_lot > 0 else "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; padding:12px 16px; margin:8px 0; color:#ff4466;'>⚠️ Modal tidak cukup untuk 1 lot.</div>"
-
+                if max_lot > 0:
+                    sizing_html = (
+                        "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; padding:12px 16px; margin:8px 0;'>"
+                        f"<div style='font-size:12px; color:#00aa44; font-weight:700; margin-bottom:6px;'>💰 POSITION SIZING ({risk_per_trade*100:.1f}% risk dari Rp {modal_total:,.0f})</div>"
+                        "<div style='display:grid; grid-template-columns:repeat(4,1fr); gap:6px; font-size:12px;'>"
+                        f"<div><span style='color:#667'>Max Lot</span><br><b style='color:#00ff99; font-size:16px'>{max_lot} lot</b></div>"
+                        f"<div><span style='color:#667'>Nilai Posisi</span><br><b>Rp {pos_val:,.0f}</b></div>"
+                        f"<div><span style='color:#667'>Risk (Rp)</span><br><b style='color:#ff8844'>Rp {actual_risk:,.0f}</b></div>"
+                        f"<div><span style='color:#667'>Est. Biaya</span><br><b style='color:#ffcc00'>Rp {fee_total:,.0f}</b></div>"
+                        "</div></div>"
+                    )
+                else:
+                    sizing_html = (
+                        "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; "
+                        "padding:12px 16px; margin:8px 0; color:#ff4466;'>"
+                        "⚠️ Modal tidak cukup untuk 1 lot dengan risk parameter ini.</div>"
+                    )
                 gap_html = ""
                 if g_stats:
                     gap_warn = "| ⚠️ <b>Saham ini sering gap besar!</b>" if g_stats['freq_large'] > 20 else ""
