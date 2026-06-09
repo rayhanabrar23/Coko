@@ -1410,82 +1410,77 @@ with tab2:
                     reasoning = ["— Data tidak tersedia —"]
 
                 # ── Build semua HTML fragments ──
+                # ── Card utama — TANPA sizing ──
+                st.markdown(
+                    f"<div class='reco-card'>"
+                    f"<div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px'>"
+                    f"<div>"
+                    f"<span style='font-size:22px; font-weight:900; color:#00bbff'>{row['Ticker']}</span>"
+                    f"&nbsp; <span class='{sig_class}'>{row['Signal']}</span>"
+                    f"&nbsp; {regime_badge}"
+                    f"&nbsp; <span style='font-size:12px; color:#667'>Beta:{row['Beta']}</span>"
+                    f"<div style='font-size:30px; font-weight:900; color:{score_c}; line-height:1.2'>"
+                    f"{row['Score']}<span style='font-size:14px; color:#667'>/100</span></div>"
+                    f"</div>"
+                    f"<div style='font-size:13px; color:#aac; text-align:right'>"
+                    f"<b>Entry:</b> {row['Entry']:,} &nbsp; <b>SL:</b> {row['SL']:,} &nbsp; <b>TP:</b> {row['TP']:,} &nbsp; <b>R:R</b> {row['R:R']}<br>"
+                    f"<b>RSI:</b> {row['RSI']} &nbsp; <b>ADX:</b> {row['ADX']} &nbsp; <b>MACD:</b> {row['MACD']} &nbsp; <b>Vol:</b> {row['Vol']}<br>"
+                    f"<b>Pola:</b> {row['Pattern']} &nbsp; <b>Div:</b> {row['Div']}<br>"
+                    f"<b>Nilai Harian:</b> {row['DailyVal']}<br>"
+                    f"{vol_warn}{vol_suspect_warn}{div_note}"
+                    f"</div></div></div>",
+                    unsafe_allow_html=True
+                )
+
+                # ── Sizing — terpisah ──
                 if max_lot > 0:
-                    sizing_html = (
-                        "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; padding:12px 16px; margin:8px 0;'>"
+                    st.markdown(
+                        f"<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; padding:12px 16px; margin:2px 0 4px 0;'>"
                         f"<div style='font-size:12px; color:#00aa44; font-weight:700; margin-bottom:6px;'>💰 POSITION SIZING ({risk_per_trade*100:.1f}% risk dari Rp {modal_total:,.0f})</div>"
-                        "<div style='display:grid; grid-template-columns:repeat(4,1fr); gap:6px; font-size:12px;'>"
+                        f"<div style='display:grid; grid-template-columns:repeat(4,1fr); gap:6px; font-size:12px;'>"
                         f"<div><span style='color:#667'>Max Lot</span><br><b style='color:#00ff99; font-size:16px'>{max_lot} lot</b></div>"
                         f"<div><span style='color:#667'>Nilai Posisi</span><br><b>Rp {pos_val:,.0f}</b></div>"
                         f"<div><span style='color:#667'>Risk (Rp)</span><br><b style='color:#ff8844'>Rp {actual_risk:,.0f}</b></div>"
                         f"<div><span style='color:#667'>Est. Biaya</span><br><b style='color:#ffcc00'>Rp {fee_total:,.0f}</b></div>"
-                        "</div></div>"
+                        f"</div></div>",
+                        unsafe_allow_html=True
                     )
                 else:
-                    sizing_html = (
-                        "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; "
-                        "padding:12px 16px; margin:8px 0; color:#ff4466;'>"
-                        "⚠️ Modal tidak cukup untuk 1 lot dengan risk parameter ini.</div>"
+                    st.markdown(
+                        "<div style='background:#001a0a; border:1px solid #444; border-radius:10px; "
+                        "padding:10px 16px; margin:2px 0 4px 0; color:#ff4466; font-size:12px;'>"
+                        "⚠️ Modal tidak cukup untuk 1 lot dengan risk parameter ini.</div>",
+                        unsafe_allow_html=True
                     )
-                
-                # Card utama — tanpa gap dan corp
-                st.markdown(f"""
-                <div class='reco-card'>
-                    <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px'>
-                        <div>
-                            <span style='font-size:22px; font-weight:900; color:#00bbff'>{row['Ticker']}</span>
-                            &nbsp; <span class='{sig_class}'>{row['Signal']}</span>
-                            &nbsp; {regime_badge}
-                            &nbsp; <span style='font-size:12px; color:#667'>Beta:{row['Beta']}</span>
-                            <div style='font-size:30px; font-weight:900; color:{score_c}; line-height:1.2'>
-                                {row['Score']}<span style='font-size:14px; color:#667'>/100</span>
-                            </div>
-                        </div>
-                        <div style='font-size:13px; color:#aac; text-align:right'>
-                            <b>Entry:</b> {row['Entry']:,} &nbsp; <b>SL:</b> {row['SL']:,} &nbsp;
-                            <b>TP:</b> {row['TP']:,} &nbsp; <b>R:R</b> {row['R:R']}<br>
-                            <b>RSI:</b> {row['RSI']} &nbsp; <b>ADX:</b> {row['ADX']} &nbsp;
-                            <b>MACD:</b> {row['MACD']} &nbsp; <b>Vol:</b> {row['Vol']}<br>
-                            <b>Pola:</b> {row['Pattern']} &nbsp; <b>Div:</b> {row['Div']}<br>
-                            <b>Nilai Harian:</b> {row['DailyVal']}<br>
-                            {vol_warn}{vol_suspect_warn}{div_note}
-                        </div>
-                    </div>
-                    {sizing_html}
-                </div>
-                """, unsafe_allow_html=True)
 
-                # Gap stats — render terpisah
+                # ── Gap stats ──
                 if g_stats:
                     gap_warn_txt = "⚠️ Saham ini sering gap besar!" if g_stats['freq_large'] > 20 else ""
-                    st.markdown(f"""
-                    <div style='background:#0d1628; border-radius:8px; padding:8px 12px;
-                                font-size:12px; color:#aac; margin:2px 0 4px 0;'>
-                        🌙 <b>Overnight Gap History:</b>
-                        avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}%
-                        | gap &gt;1%: {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
-                        {"| <b style='color:#ff8844'>" + gap_warn_txt + "</b>" if gap_warn_txt else ""}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#0d1628; border-radius:8px; padding:8px 12px; font-size:12px; color:#aac; margin:2px 0;'>"
+                        f"🌙 <b>Overnight Gap History:</b> avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}% "
+                        f"| gap &gt;1%: {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun"
+                        f"{'  <b style=\"color:#ff8844\">' + gap_warn_txt + '</b>' if gap_warn_txt else ''}"
+                        f"</div>",
+                        unsafe_allow_html=True
+                    )
 
-                # Corp action — render terpisah per item
+                # ── Corp action ──
                 for cw in corp_warns:
-                    st.markdown(f"""
-                    <div style='background:#2a1500; border:1px solid #ff8800; border-radius:8px;
-                                padding:8px 12px; margin:2px 0; font-size:12px; color:#ffaa44;'>
-                        {cw}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='background:#2a1500; border:1px solid #ff8800; border-radius:8px; "
+                        f"padding:8px 12px; margin:2px 0; font-size:12px; color:#ffaa44;'>{cw}</div>",
+                        unsafe_allow_html=True
+                    )
 
-                # IHSG note
+                # ── IHSG note ──
                 if row.get('IHSGNote') and row['IHSGNote'] != '—':
-                    st.markdown(f"""
-                    <div style='font-size:11px; color:#556; margin:2px 0 8px 0;'>
-                        {row['IHSGNote']}
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(
+                        f"<div style='font-size:11px; color:#556; margin:2px 0 8px 0;'>{row['IHSGNote']}</div>",
+                        unsafe_allow_html=True
+                    )
 
-                # Reasoning expander
+                # ── Reasoning ──
                 with st.expander(f"📋 Kenapa {row['Ticker']} masuk rekomendasi?"):
                     for r in reasoning:
                         icon_color = "#00ff99" if "✅" in r else ("#ffcc00" if "🟡" in r else ("#ff4466" if "⚠️" in r else "#aac"))
