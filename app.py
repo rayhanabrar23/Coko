@@ -148,7 +148,7 @@ UNIVERSES = {
     "IDX80 — Broad Market":           IDX80,
     "IDX High Dividend 20":           IDX_HIDIV20,
     "IDX Growth 30":                  IDX_GROWTH30,
-    "ALL Sektor (957 saham)":         list(dict.fromkeys([t for tickers in SECTORS.values() for t in tickers])),
+    "ALL Sektor (semua)": list(dict.fromkeys([t for tickers in SECTORS.values() for t in tickers])),
 }
 
 # Biaya transaksi per broker (roundtrip %)
@@ -253,7 +253,7 @@ def load_idx_eod(uploaded_file):
 def fetch_df(ticker, period="6mo"):
     # Selalu fetch minimal 1y agar EMA200 konvergen
     fetch_period = "1y" if period in ("6mo","3mo") else period
-    df = clean_df(yf.download(ticker, period=fetch_period, progress=False))
+    df = clean_df(yf.download(ticker, period=fetch_period, progress=False, timeout=10))
     if df.empty or len(df) < 52: return None
     df = df.copy()
 
@@ -1163,7 +1163,7 @@ with tab2:
         info  = st.empty()
         results = []; done = 0
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=12) as ex:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=25) as ex:
             futs = {ex.submit(scan_one, a): a[0] for a in args}
             for fut in concurrent.futures.as_completed(futs):
                 done += 1
