@@ -1411,7 +1411,8 @@ with tab2:
 
                 # ── Build semua HTML fragments ──
                 sizing_html = f"""
-                <div class='sizing-box'>
+                <div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px;
+                            padding:12px 16px; margin:8px 0;'>
                     <div style='font-size:12px; color:#00aa44; font-weight:700; margin-bottom:6px;'>
                         💰 POSITION SIZING ({risk_per_trade*100:.1f}% risk dari Rp {modal_total:,.0f})
                     </div>
@@ -1422,20 +1423,25 @@ with tab2:
                         <div><span style='color:#667'>Est. Biaya</span><br><b style='color:#ffcc00'>Rp {fee_total:,.0f}</b></div>
                     </div>
                 </div>
-                """ if max_lot > 0 else "<div class='sizing-box' style='color:#ff4466'>⚠️ Modal tidak cukup untuk 1 lot.</div>"
+                """ if max_lot > 0 else "<div style='background:#001a0a; border:1px solid #00aa44; border-radius:10px; padding:12px 16px; margin:8px 0; color:#ff4466;'>⚠️ Modal tidak cukup untuk 1 lot.</div>"
 
                 gap_html = ""
                 if g_stats:
+                    gap_warn = "| ⚠️ <b>Saham ini sering gap besar!</b>" if g_stats['freq_large'] > 20 else ""
                     gap_html = f"""
-                    <div class='gap-stat'>
+                    <div style='background:#0d1628; border-radius:8px; padding:8px 12px;
+                                font-size:12px; color:#aac; margin:4px 0;'>
                         🌙 <b>Overnight Gap History:</b>
                         avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}%
-                        | gap >1% terjadi {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
-                        {'| ⚠️ <b>Saham ini sering gap besar!</b>' if g_stats['freq_large'] > 20 else ''}
+                        | gap &gt;1% terjadi {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
+                        {gap_warn}
                     </div>"""
 
-                corp_html = "".join([f"<div class='corp-warn'>{w}</div>" for w in corp_warns])
-
+                corp_html = "".join([
+                    f"<div style='background:#2a1500; border:1px solid #ff8800; border-radius:8px; "
+                    f"padding:8px 12px; margin:4px 0; font-size:12px; color:#ffaa44;'>{w}</div>"
+                    for w in corp_warns
+                ])
                 # ── Render card utama ──
                 st.markdown(f"""
                 <div class='reco-card'>
