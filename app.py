@@ -544,6 +544,133 @@ def detect_patterns(df):
         if c[-3]>o[-3] and abs(c[-2]-o[-2])<0.003*c[-2] and c[i]<o[i]: patterns.append("🌇 Evening Star")
     return patterns or ["—"]
 
+# ── TARUH SETELAH def detect_patterns(df): ──────────────────
+
+def generate_reasoning(ticker, df, score, detail, regime, ihsg_df, sector_perfs=None):
+    reasons = []
+    last = df.iloc[-1]
+    cl   = sf(last['close'])
+    e20  = sf(last['ema20'])
+    e50  = sf(last['ema50'])
+    e200 = sf(last['ema200'])
+    rsi  = sf(last['rsi'])
+    macd = sf(last['macd'])
+    sig_v= sf(last['sig'])
+    hist = sf(last['hist'])
+    hist_p = sf(df['hist'].iloc[-2]) if len(df) > 2 else 0
+    vr   = sf(last['vol_ratio'])
+    is_green = cl >= sf(last['open'])
+
+    # ① MACRO
+    if ihsg_df is not None and not ihsg_df.empty:
+        ihsg_last = sf(ihsg_df['close'].iloc[-1])
+        ihsg_ma20 = ihsg_df['close'].rolling(20).mean().iloc[-1]
+        ihsg_chg5 = (ihsg_last - sf(ihsg_df['close'].iloc[-5])) / sf(ihsg_df['close'].iloc[-5]) * 100 if len(ihsg_df) >= 5 else 0
+        if ihsg_last > ihsg_ma20 and ihsg_chg5 > 0:
+            reasons.append(f"① MACRO ✅ IHSG di atas MA20, momentum {ihsg_chg5:+.1f}% (5D) — kondisi market mendukung")
+        elif ihsg_last > ihsg_ma20:
+            reasons.append(f"① MACRO 🟡 IHSG di atas MA20 tapi momentum flat {ihsg_chg5:+.1f}% (5D)")
+        else:
+            reasons.append(f"① MACRO ⚠️ IHSG di bawah MA20 ({ihsg_chg5:+.1f}% 5D) — headwind, score dikurangi otomatis")
+    else:
+        reasons.append("① MACRO — Data IHSG tidak tersedia")
+
+    # ② SEKTOR
+    ticker_name = ticker.replace(".JK", "")
+    sektor = next((s for s, tickers in SECTORS.items() if ticker_name in tickers), None)
+    if sektor and sector_perfs and sektor in sector_perfs:
+        perf = sector_perfs[sektor]
+        icon = "✅" if perf > 0.5 else ("🟡" if perf > -0.5 else "⚠️")
+        reasons.append(f"② SEKTOR {icon} {sektor}: {perf:+.2f}% (5D) — {'outperform' if perf > 0 else 'underperform'}")
+    elif sektor:
+        reasons.append(f"② SEKTOR — {sektor} (performa 5D tidak tersedia)")
+    else:
+        reasons.append("② SEKTOR — Tidak ditemukan di mapping sektor")
+
+    # ③ TREND
+    if cl > e20 > e50 > e200 > 0:
+        reasons.append("③ TREND ✅ Full alignment: Harga > EMA20 > EMA50 > EMA200 — struktur uptrend sempurna")
+    elif cl > e20 > e50:
+        reasons.append("③ TREND 🟡 Harga > EMA20 > EMA50, EMA200 belum aligned — uptrend jangka pendek-menengah")
+    elif cl > e20:
+        reasons.append("③ TREND 🟡 Harga di atas EMA20 saja — trend jangka pendek, konfirmasi lemah")
+    else:
+        reasons.append("③ TREND ⚠️ Harga di bawah EMA20 — struktur trend belum bullish")
+
+    adx_v = sf(last['adx'])
+    dmp   = sf(last['dmp'])
+    dmn   = sf(last['dmn'])
+    if adx_v > 25 and dmp > dmn:
+        reasons.append(f"   ADX {adx_v:.0f} > 25 dengan DI+ > DI- — trend kuat dan valid ✅")
+    elif adx_v > 20:
+        reasons.append(f"   ADX {adx_v:.0f} — trend mulai terbentuk 🟡")
+    else:
+        reasons.append(f"   ADX {adx_v:.0f} < 20 — pasar masih sideways/ranging")
+
+    # ④ MOMENTUM
+    macd_status = ""
+    if macd > sig_v and hist > 0 and hist > hist_p:
+        macd_status = "MACD golden cross + histogram naik ✅"
+    elif macd > sig_v:
+        macd_status = "MACD bullish tapi histogram melemah 🟡"
+    else:
+        macd_status = "MACD masih bearish ⚠️"
+
+    rsi_note = ""
+    if regime == "trending":
+        if 50 <= rsi <= 70:   rsi_note = f"RSI {rsi:.0f} zona sehat trending ✅"
+        elif rsi > 70:        rsi_note = f"RSI {rsi:.0f} overbought — hati-hati ⚠️"
+        else:                 rsi_note = f"RSI {rsi:.0f} belum konfirmasi momentum 🟡"
+    else:
+        if 30 <= rsi <= 45:   rsi_note = f"RSI {rsi:.0f} oversold recovery — potensi bouncing ✅"
+        elif rsi < 30:        rsi_note = f"RSI {rsi:.0f} sangat oversold 🟡"
+        else:                 rsi_note = f"RSI {rsi:.0f} netral 🟡"
+    reasons.append(f"④ MOMENTUM — {rsi_note} | {macd_status}")
+
+    # ⑤ VOLUME
+    if vr >= 2.0 and is_green:
+        reasons.append(f"⑤ VOLUME ✅ {vr:.1f}x rata-rata dengan candle hijau — sinyal akumulasi kuat")
+    elif vr >= 1.5 and is_green:
+        reasons.append(f"⑤ VOLUME ✅ {vr:.1f}x rata-rata — volume di atas normal, konfirmasi bullish")
+    elif vr >= 1.0:
+        reasons.append(f"⑤ VOLUME 🟡 {vr:.1f}x rata-rata — volume cukup, {'hijau' if is_green else 'merah ⚠️'}")
+    else:
+        reasons.append(f"⑤ VOLUME ⚠️ {vr:.1f}x rata-rata — volume sepi, sinyal kurang meyakinkan")
+
+    # ⑥ CANDLESTICK
+    pats = detect_patterns(df)
+    pat_str = pats[0] if pats and pats[0] != "—" else "Tidak ada pola signifikan"
+    bullish_pats = ['Bull Engulfing','Morning Star','Bull Marubozu','Hammer']
+    if any(k in pat_str for k in bullish_pats):
+        reasons.append(f"⑥ PATTERN ✅ {pat_str} — pola bullish terkonfirmasi")
+    elif pat_str != "Tidak ada pola signifikan":
+        reasons.append(f"⑥ PATTERN 🟡 {pat_str}")
+    else:
+        reasons.append("⑥ PATTERN — Tidak ada pola candlestick signifikan hari ini")
+
+    # ⑦ FOREIGN FLOW
+    foreign_note = detail.get("Foreign Flow", "—")
+    foreign_sig  = detail.get("Foreign Signal", 0)
+    if foreign_sig > 0:
+        reasons.append(f"⑦ FOREIGN ✅ {foreign_note}")
+    elif foreign_sig < 0:
+        reasons.append(f"⑦ FOREIGN ⚠️ {foreign_note}")
+    else:
+        reasons.append("⑦ FOREIGN — Tidak ada data foreign flow (upload EOD untuk aktifkan)")
+
+    # ⑧ DIVERGENCE / BONUS
+    div = detail.get("RSI Div", "none")
+    if div == "bullish":
+        reasons.append("⑧ BONUS ✅ RSI Bullish Divergence terdeteksi — harga lower low tapi RSI higher low, potensi reversal kuat")
+    elif div == "bearish":
+        reasons.append("⑧ BONUS ⚠️ RSI Bearish Divergence — waspadai pembalikan arah")
+    
+    bb_w = sf(last.get('bb_width', 0))
+    if bb_w < 0.03:
+        reasons.append("⑧ BONUS ✅ Bollinger Band Squeeze — volatilitas rendah, potensi breakout besar segera")
+
+    return reasons
+
 # ─────────────────────────────────────────────
 # FIX 8: WEIGHTED SCORING — REGIME AWARE
 # BB Bonus dipindahkan ke dalam momentum sub-score
@@ -683,6 +810,20 @@ def score_ticker(df, ihsg_df=None, idx_eod=None):
                 foreign_note   = f"🟡 Asing net sell minor {abs(net)/1e6:.1f}jt lembar"
 
     score = max(0, min(score + foreign_signal - ihsg_penalty, 100))
+
+    # ── GOLDEN ALIGNMENT BONUS ──────────────────
+    if cl > e20 > e50 > e200 > 0:
+        score = min(score + 15, 100)
+
+    # ── VOLUME HARD RULE: Strong BUY wajib konfirmasi volume ──
+    last_vr = sf(df['vol_ratio'].iloc[-1])
+    if score >= 70 and last_vr < 1.3:
+        score = min(score, 69)  # cap di bawah Strong BUY threshold
+
+    # ── ADX SIDEWAYS CAP ────────────────────────
+    adx_recent = df['adx'].iloc[-10:].mean() if len(df) >= 10 else adx_val
+    if sf(adx_recent) < 15:
+        score = min(score, 50)
 
     # ── BETA ─────────────────────────────────────
     beta = calc_beta(df, ihsg_df)
@@ -1241,6 +1382,14 @@ with tab2:
                     """
 
                 corp_html = "".join([f"<div class='corp-warn'>{w}</div>" for w in corp_warns])
+                
+                # Generate reasoning
+                reasoning = generate_reasoning(
+                    jk(row['Ticker']), df_tmp, row['Score'],
+                    score_ticker(df_tmp, ihsg_df_global, idx_eod)[1],
+                    row['Regime'].lower(), ihsg_df_global,
+                    sector_perfs={s: (lambda d: round((sf(d['close'].iloc[-1]) - sf(d['close'].iloc[-5])) / sf(d['close'].iloc[-5]) * 100, 2) if d is not None and len(d) >= 5 else 0)(clean_df(yf.download(jk(SECTOR_PROXY[s]), period="10d", progress=False)) if s in SECTOR_PROXY else None) for s in SECTORS}
+                )
 
                 st.markdown(f"""
                 <div class='reco-card'>
