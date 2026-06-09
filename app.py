@@ -949,10 +949,10 @@ def scan_one(args):
      min_daily_value, ihsg_df, broker_fee_pct, idx_eod) = args
     name = ticker.replace(".JK", "")
     try:
-        df = fetch_df(ticker, "6mo")
-        if df is None: return None, name, "Data kosong"
         if name in PEMANTAUAN_KHUSUS:
             return None, name, "Pemantauan Khusus — skip"
+        df = fetch_df(ticker, "6mo")
+        if df is None: return None, name, "Data kosong"
 
         # FIX: Filter daily value (likuiditas)
         avg_val = df.attrs.get('avg_daily_value', 0)
@@ -1343,10 +1343,49 @@ with tab2:
 
         prog.empty(); info.empty()
 
+        if len(results) < 5:
+            st.warning(f"Hanya {len(results)} saham lolos filter ketat. Menjalankan mode Relaxed untuk melengkapi...")
+
+            # Relaxed params — score min 35, hapus filter EMA & vol
+            params_relaxed = (35, "Semua BUY", False, 0.5, False, False,
+                              20, 85, min_daily_value * 0.5,
+                              ihsg_df_global, broker_fee, idx_eod)
+            args_relaxed = [(t, *params_relaxed) for t in tickers]
+
+            existing_tickers = {r["Ticker"] for r in results}
+            prog2  = st.progress(0)
+            info2  = st.empty()
+            done2  = 0
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=25) as ex:
+                futs2 = {ex.submit(scan_one, a): a[0] for a in args_relaxed}
+                for fut in concurrent.futures.as_completed(futs2):
+                    done2 += 1
+                    prog2.progress(done2 / len(tickers))
+                    info2.markdown(f"⚡ Relaxed scan {done2}/{len(tickers)} | Kandidat: **{len(results)}**")
+                    res2, name2, _ = fut.result()
+                    if res2 and name2 not in existing_tickers:
+                        res2["Signal"] = res2["Signal"] + " ⚠️"  # tandai sebagai relaxed
+                        results.append(res2)
+                        existing_tickers.add(name2)
+
+            prog2.empty()
+            info2.empty()
+            st.info("⚠️ Saham bertanda ⚠️ lolos dari filter relaxed — gunakan sebagai watchlist, bukan rekomendasi langsung.")
+
         if not results:
-            st.warning("Tidak ada saham yang lolos filter. Coba turunkan min score atau min daily value.")
+            st.warning("Tidak ada saham yang lolos bahkan dengan filter relaxed. Coba ganti universe atau turunkan min daily value.")
         else:
-            df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(top_n)
+            df_res = pd.DataFrame(results).sort_values("Score", ascending=False).head(max(top_n, 5))
+            n_saved = save_scan_to_log(df_res, hold_period)
+            if n_saved:
+                st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
+
+            st.markdown(f"### Top {len(df_res)} Rekomendasi — {datetime.now(TZ_JKT).strftime('%d %b %Y %H:%M')} WIB")
+
+            show_cols = ["Ticker","Score","Regime","Signal","Entry","SL","TP","R:R",
+                         "RSI","Vol","MACD","Div","Pattern","Beta","GapAvg","DailyVal","Foreign","VolSuspect"]
+            st.dataframe(df_res[show_cols], use_container_width=True, hide_index=True)
             n_saved = save_scan_to_log(df_res, hold_period)
             if n_saved:
                 st.success(f"💾 {n_saved} rekomendasi disimpan ke tracker.")
