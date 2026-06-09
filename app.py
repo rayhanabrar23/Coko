@@ -1427,23 +1427,7 @@ with tab2:
                         "padding:12px 16px; margin:8px 0; color:#ff4466;'>"
                         "⚠️ Modal tidak cukup untuk 1 lot dengan risk parameter ini.</div>"
                     )
-                gap_html = ""
-                if g_stats:
-                    gap_warn = "| ⚠️ <b>Saham ini sering gap besar!</b>" if g_stats['freq_large'] > 20 else ""
-                    gap_html = f"""
-                    <div style='background:#0d1628; border-radius:8px; padding:8px 12px;
-                                font-size:12px; color:#aac; margin:4px 0;'>
-                        🌙 <b>Overnight Gap History:</b>
-                        avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}%
-                        | gap &gt;1% terjadi {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
-                        {gap_warn}
-                    </div>"""
-
-                corp_html = "".join([
-                    f"<div style='background:#2a1500; border:1px solid #ff8800; border-radius:8px; "
-                    f"padding:8px 12px; margin:4px 0; font-size:12px; color:#ffaa44;'>{w}</div>"
-                    for w in corp_warns
-                ])
+                
                 # Card utama — tanpa gap dan corp
                 st.markdown(f"""
                 <div class='reco-card'>
