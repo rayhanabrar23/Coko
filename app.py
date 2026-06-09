@@ -1467,17 +1467,18 @@ with tab2:
                     {gap_html}
                     {corp_html}
                     <div style='font-size:11px; color:#556; margin-top:6px'>{row.get('IHSGNote','')}</div>
-                    <details style='margin-top:10px;'>
-                        <summary style='cursor:pointer; color:#00bbff; font-size:12px; font-weight:700;
-                                        padding:6px 10px; background:#060d1a; border-radius:6px;'>
-                            📋 Kenapa {row['Ticker']} masuk rekomendasi? (klik untuk buka)
-                        </summary>
-                        <div style='margin-top:6px; padding:10px; background:#060d1a; border-radius:8px;'>
-                            {reasoning_html}
-                        </div>
-                    </details>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # Reasoning pakai st.expander — tidak bisa nested dalam st.markdown
+                with st.expander(f"📋 Kenapa {row['Ticker']} masuk rekomendasi? (klik untuk buka)"):
+                    for r in reasoning:
+                        icon_color = "#00ff99" if "✅" in r else ("#ffcc00" if "🟡" in r else ("#ff4466" if "⚠️" in r else "#aac"))
+                        st.markdown(
+                            f"<div style='padding:5px 0; font-size:13px; color:{icon_color}; "
+                            f"border-bottom:1px solid #111d2e;'>{r}</div>",
+                            unsafe_allow_html=True
+                        )
 
             fig_bar = go.Figure()
             fig_bar.add_trace(go.Bar(
