@@ -1442,7 +1442,7 @@ with tab2:
                     f"padding:8px 12px; margin:4px 0; font-size:12px; color:#ffaa44;'>{w}</div>"
                     for w in corp_warns
                 ])
-                # ── Render card utama ──
+                # Card utama — tanpa gap dan corp
                 st.markdown(f"""
                 <div class='reco-card'>
                     <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px'>
@@ -1466,13 +1466,40 @@ with tab2:
                         </div>
                     </div>
                     {sizing_html}
-                    {gap_html}
-                    {corp_html}
-                    <div style='font-size:11px; color:#556; margin-top:6px'>{row.get('IHSGNote','')}</div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # ── Reasoning di expander native Streamlit ──
+                # Gap stats — render terpisah
+                if g_stats:
+                    gap_warn_txt = "⚠️ Saham ini sering gap besar!" if g_stats['freq_large'] > 20 else ""
+                    st.markdown(f"""
+                    <div style='background:#0d1628; border-radius:8px; padding:8px 12px;
+                                font-size:12px; color:#aac; margin:2px 0 4px 0;'>
+                        🌙 <b>Overnight Gap History:</b>
+                        avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}%
+                        | gap &gt;1%: {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
+                        {"| <b style='color:#ff8844'>" + gap_warn_txt + "</b>" if gap_warn_txt else ""}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Corp action — render terpisah per item
+                for cw in corp_warns:
+                    st.markdown(f"""
+                    <div style='background:#2a1500; border:1px solid #ff8800; border-radius:8px;
+                                padding:8px 12px; margin:2px 0; font-size:12px; color:#ffaa44;'>
+                        {cw}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # IHSG note
+                if row.get('IHSGNote') and row['IHSGNote'] != '—':
+                    st.markdown(f"""
+                    <div style='font-size:11px; color:#556; margin:2px 0 8px 0;'>
+                        {row['IHSGNote']}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # Reasoning expander
                 with st.expander(f"📋 Kenapa {row['Ticker']} masuk rekomendasi?"):
                     for r in reasoning:
                         icon_color = "#00ff99" if "✅" in r else ("#ffcc00" if "🟡" in r else ("#ff4466" if "⚠️" in r else "#aac"))
