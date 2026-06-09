@@ -163,8 +163,16 @@ BROKER_FEES = {
 IDX_LEVY = 0.04  # 0.04% per sisi, total ~0.08%
 
 TZ_JKT   = pytz.timezone("Asia/Jakarta")
-TRACKER  = Path("idx_trade_log.json")
+TRACKER       = Path("idx_trade_log.json")
+WATCHLIST_FILE = Path("idx_watchlist.json")
 
+def load_watchlist():
+    if WATCHLIST_FILE.exists():
+        with open(WATCHLIST_FILE) as f: return json.load(f)
+    return []
+
+def save_watchlist(tickers: list):
+    with open(WATCHLIST_FILE, "w") as f: json.dump(tickers, f)
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
@@ -1125,6 +1133,26 @@ with st.sidebar:
         st.caption("Belum ada data EOD — foreign flow tidak aktif")
 
     st.markdown("---")
+    st.markdown("**📌 Watchlist Persistent**")
+    wl_current = load_watchlist()
+    wl_input = st.text_input(
+        "Tambah ke watchlist (pisah koma):",
+        placeholder="BBRI, TLKM, BMRI",
+        key="wl_input_sidebar"
+    )
+    if st.button("Simpan Watchlist", key="save_wl"):
+        new_tickers = [t.strip().upper() for t in wl_input.split(",") if t.strip()]
+        merged = list(dict.fromkeys(wl_current + new_tickers))
+        save_watchlist(merged)
+        st.success(f"✅ {len(merged)} saham tersimpan")
+        wl_current = merged
+    if wl_current:
+        st.caption(f"📌 {len(wl_current)} saham: {', '.join(wl_current[:8])}{'...' if len(wl_current)>8 else ''}")
+        if st.button("🗑️ Reset Watchlist", key="reset_wl"):
+            save_watchlist([])
+            st.rerun()
+
+    st.markdown("---")
     now_jkt = datetime.now(TZ_JKT)
     ttl_val = get_cache_ttl()
     st.caption(f"🕐 WIB: {now_jkt.strftime('%H:%M')}")
@@ -1332,6 +1360,19 @@ with tab2:
             st.markdown("---")
             st.markdown("#### Detail, Sizing & Risk per Saham")
 
+            # Hitung sector performance SEKALI untuk semua saham
+            sector_perfs = {}
+            for s, proxy in SECTOR_PROXY.items():
+                try:
+                    d = clean_df(yf.download(jk(proxy), period="10d", progress=False))
+                    if d is not None and not d.empty and len(d) >= 5:
+                        sector_perfs[s] = round(
+                            (sf(d['close'].iloc[-1]) - sf(d['close'].iloc[-5]))
+                            / sf(d['close'].iloc[-5]) * 100, 2
+                        )
+                except:
+                    sector_perfs[s] = 0
+
             for _, row in df_res.iterrows():
                 score_c = "#00ff99" if row['Score']>=70 else ("#ffcc00" if row['Score']>=55 else "#ff4466")
                 regime_badge = (f"<span class='regime-trend'>{row['Regime']}</span>" if row['Regime']=="Trending"
@@ -1383,13 +1424,22 @@ with tab2:
 
                 corp_html = "".join([f"<div class='corp-warn'>{w}</div>" for w in corp_warns])
                 
-                # Generate reasoning
-                reasoning = generate_reasoning(
-                    jk(row['Ticker']), df_tmp, row['Score'],
-                    score_ticker(df_tmp, ihsg_df_global, idx_eod)[1],
-                    row['Regime'].lower(), ihsg_df_global,
-                    sector_perfs={s: (lambda d: round((sf(d['close'].iloc[-1]) - sf(d['close'].iloc[-5])) / sf(d['close'].iloc[-5]) * 100, 2) if d is not None and len(d) >= 5 else 0)(clean_df(yf.download(jk(SECTOR_PROXY[s]), period="10d", progress=False)) if s in SECTOR_PROXY else None) for s in SECTORS}
-                )
+                # Generate reasoning — pakai sector_perfs yang sudah dihitung di atas
+                if df_tmp is not None:
+                    _, detail_tmp, _, _ = score_ticker(df_tmp, ihsg_df_global, idx_eod)
+                    reasoning = generate_reasoning(
+                        jk(row['Ticker']), df_tmp, row['Score'],
+                        detail_tmp, row['Regime'].lower(),
+                        ihsg_df_global, sector_perfs
+                    )
+                else:
+                    reasoning = ["— Data tidak tersedia untuk reasoning —"]
+
+                reasoning_html = "".join([
+                    f"<div style='padding:4px 0; font-size:12px; color:#aac; "
+                    f"border-bottom:1px solid #111d2e;'>{r}</div>"
+                    for r in reasoning
+                ])
 
                 st.markdown(f"""
                 <div class='reco-card'>
@@ -1417,6 +1467,15 @@ with tab2:
                     {gap_html}
                     {corp_html}
                     <div style='font-size:11px; color:#556; margin-top:6px'>{row.get('IHSGNote','')}</div>
+                    <details style='margin-top:10px;'>
+                        <summary style='cursor:pointer; color:#00bbff; font-size:12px; font-weight:700;
+                                        padding:6px 10px; background:#060d1a; border-radius:6px;'>
+                            📋 Kenapa {row['Ticker']} masuk rekomendasi? (klik untuk buka)
+                        </summary>
+                        <div style='margin-top:6px; padding:10px; background:#060d1a; border-radius:8px;'>
+                            {reasoning_html}
+                        </div>
+                    </details>
                 </div>
                 """, unsafe_allow_html=True)
 
