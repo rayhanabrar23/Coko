@@ -1679,7 +1679,9 @@ with tab3:
 
             # ── Highlight candle penting ──────────────────
             pattern_markers = []
-            for idx_i in range(2, len(df)):
+            # Hanya scan 30 hari terakhir — lebih dari itu terlalu ramai
+            scan_start = max(2, len(df) - 30)
+            for idx_i in range(scan_start, len(df)):
                 row_c = df.iloc[idx_i]
                 o_c, h_c, l_c, c_c = sf(row_c['open']), sf(row_c['high']), sf(row_c['low']), sf(row_c['close'])
                 body_c = abs(c_c - o_c)
@@ -1689,24 +1691,42 @@ with tab3:
                 lw_c = min(c_c, o_c) - l_c
                 pb_c = abs(sf(df.iloc[idx_i-1]['close']) - sf(df.iloc[idx_i-1]['open']))
                 label_c, color_c, sym_c = None, None, None
-                if lw_c >= 2*body_c and uw_c <= 0.3*body_c and body_c/rng_c > 0.05:
+                # Hammer — ekor bawah minimal 2.5x body, body minimal 5% range
+                if (lw_c >= 2.5*body_c and uw_c <= 0.2*body_c
+                        and body_c/rng_c > 0.05 and c_c > o_c):
                     label_c, color_c, sym_c = "🔨 Hammer", "#00ff99", "triangle-up"
-                elif uw_c >= 2*body_c and lw_c <= 0.3*body_c:
+
+                # Shooting Star — ekor atas minimal 2.5x body, candle merah
+                elif (uw_c >= 2.5*body_c and lw_c <= 0.2*body_c
+                        and body_c/rng_c > 0.05 and c_c < o_c):
                     label_c, color_c, sym_c = "⬆️ Shooting Star", "#ff4466", "triangle-down"
-                elif body_c/rng_c < 0.1:
-                    label_c, color_c, sym_c = "✳️ Doji", "#ffcc00", "diamond"
+
+                # Bull Engulfing — body harus minimal 1.5x body candle sebelumnya
                 elif (sf(df.iloc[idx_i-1]['close']) < sf(df.iloc[idx_i-1]['open'])
-                      and c_c > o_c and body_c > pb_c):
+                        and c_c > o_c and body_c >= pb_c * 1.5
+                        and body_c / rng_c > 0.6):
                     label_c, color_c, sym_c = "🟢 Bull Engulfing", "#00ff99", "star"
+
+                # Bear Engulfing — body harus minimal 1.5x body candle sebelumnya
                 elif (sf(df.iloc[idx_i-1]['close']) > sf(df.iloc[idx_i-1]['open'])
-                      and c_c < o_c and body_c > pb_c):
+                        and c_c < o_c and body_c >= pb_c * 1.5
+                        and body_c / rng_c > 0.6):
                     label_c, color_c, sym_c = "🔴 Bear Engulfing", "#ff4466", "star"
-                elif idx_i >= 3:
+
+                # Morning Star — 3 candle strict
+                elif (idx_i >= 3):
                     o3,c3 = sf(df.iloc[idx_i-2]['open']), sf(df.iloc[idx_i-2]['close'])
                     o2,c2 = sf(df.iloc[idx_i-1]['open']), sf(df.iloc[idx_i-1]['close'])
-                    if c3 < o3 and abs(c2-o2) < 0.003*c2 and c_c > o_c:
+                    body3 = abs(c3-o3); rng3 = sf(df.iloc[idx_i-2]['high'])-sf(df.iloc[idx_i-2]['low'])
+                    if (c3 < o3 and body3/rng3 > 0.5          # candle 1: merah besar
+                            and abs(c2-o2) < 0.003*c2          # candle 2: doji
+                            and c_c > o_c and body_c/rng_c > 0.5   # candle 3: hijau besar
+                            and c_c > (o3+c3)/2):              # tutup di atas midpoint candle 1
                         label_c, color_c, sym_c = "🌅 Morning Star", "#00ff99", "star"
-                    elif c3 > o3 and abs(c2-o2) < 0.003*c2 and c_c < o_c:
+                    elif (c3 > o3 and body3/rng3 > 0.5
+                            and abs(c2-o2) < 0.003*c2
+                            and c_c < o_c and body_c/rng_c > 0.5
+                            and c_c < (o3+c3)/2):
                         label_c, color_c, sym_c = "🌇 Evening Star", "#ff4466", "star"
                 if label_c:
                     pattern_markers.append({
@@ -1732,7 +1752,7 @@ with tab3:
                     textposition=[m["pos"] for m in pattern_markers],
                     textfont=dict(size=9, color="#ffffff"),
                     name="Pattern",
-                    hovertemplate="%{text}<extra></extra>",
+                    hovertemplate="<b>%{text}</b><br>📅 %{x|%d %b %Y}<extra></extra>",
                 ), row=1, col=1)
 
             fig.update_layout(height=680, template='plotly_dark',
