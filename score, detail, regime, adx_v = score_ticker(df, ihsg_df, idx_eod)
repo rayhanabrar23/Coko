@@ -177,6 +177,45 @@ def get_cache_ttl():
     return 1800  # saat market buka: 30 menit
 
 # ─────────────────────────────────────────────
+# IDX EOD DATA LOADER
+# ─────────────────────────────────────────────
+@st.cache_data(ttl=get_cache_ttl(), show_spinner=False, hash_funcs={"streamlit.runtime.uploaded_file_manager.UploadedFile": lambda f: f.name})
+def load_idx_eod(uploaded_file):
+    """
+    Parse Ringkasan_Saham-YYYYMMDD.xlsx dari IDX.
+    Returns dict: {ticker: {net_foreign, foreign_buy, foreign_sell,
+                             nilai, frekuensi, bid, ask, bid_vol, ask_vol,
+                             close, prev_close, pct_change}}
+    """
+    df = pd.read_excel(uploaded_file, header=0)
+    result = {}
+    for _, row in df.iterrows():
+        ticker = str(row.get('Kode Saham', '')).strip()
+        if not ticker or ticker == 'nan': continue
+        try:
+            fb   = float(row.get('Foreign Buy',  0) or 0)
+            fs   = float(row.get('Foreign Sell', 0) or 0)
+            close = float(row.get('Penutupan',   0) or 0)
+            prev  = float(row.get('Sebelumnya',  0) or 0)
+            result[ticker] = {
+                'foreign_buy':  fb,
+                'foreign_sell': fs,
+                'net_foreign':  fb - fs,
+                'nilai':        float(row.get('Nilai',      0) or 0),
+                'frekuensi':    int(row.get('Frekuensi',    0) or 0),
+                'ask':          float(row.get('Offer',      0) or 0),
+                'ask_vol':      float(row.get('Offer Volume', 0) or 0),
+                'bid':          float(row.get('Bid',        0) or 0),
+                'bid_vol':      float(row.get('Bid Volume', 0) or 0),
+                'close':        close,
+                'prev_close':   prev,
+                'pct_change':   round((close - prev) / prev * 100, 2) if prev > 0 else 0,
+                'volume':       float(row.get('Volume',     0) or 0),
+            }
+        except: continue
+    return result
+    
+# ─────────────────────────────────────────────
 # CORE: FETCH + INDICATORS
 # FIX 2: Fetch 1y untuk EMA200 valid, trim display ke 6mo
 # FIX 3: Validasi volume data IDX
@@ -249,7 +288,8 @@ def fetch_df(ticker, period="6mo"):
     # ── FIX 5: IHSG Beta rolling 20 hari ──
     # Disimpan di attrs, dihitung terpisah untuk efisiensi
     df.attrs['beta_20d'] = None  # akan diisi oleh calc_beta()
-
+    df.attrs['ticker_name'] = ticker.replace(".JK", "")
+    
     # Trim ke period yang diminta untuk display
     if period == "6mo":
         cutoff = df.index[-1] - pd.DateOffset(months=6)
@@ -480,7 +520,7 @@ def detect_patterns(df):
 # BB Bonus dipindahkan ke dalam momentum sub-score
 # Market context multiplier (IHSG trend)
 # ─────────────────────────────────────────────
-def score_ticker(df, ihsg_df=None):
+def score_ticker(df, ihsg_df=None, idx_eod=None):
     if df is None or df.empty or len(df) < 30:
         return 0, {}, "ranging", 0
 
@@ -590,7 +630,30 @@ def score_ticker(df, ihsg_df=None):
         elif ihsg_chg5 > 1.5:
             ihsg_context = f"✅ IHSG momentum bullish +5D {ihsg_chg5:.1f}%"
 
-    score = max(0, score - ihsg_penalty)
+    # ── FOREIGN FLOW dari IDX EOD ─────────────────
+    foreign_signal = 0
+    foreign_note   = "—"
+    if idx_eod:
+        ticker_name = df.attrs.get('ticker_name', '')
+        eod = idx_eod.get(ticker_name, {})
+        if eod:
+            net     = eod.get('net_foreign', 0)
+            vol     = eod.get('volume', 1)
+            net_pct = net / vol * 100 if vol > 0 else 0
+            if net > 0 and net_pct > 20:
+                foreign_signal = 15
+                foreign_note   = f"✅ Asing net BUY {net/1e6:.1f}jt lembar ({net_pct:.0f}% vol)"
+            elif net > 0:
+                foreign_signal = 8
+                foreign_note   = f"🟡 Asing net buy minor {net/1e6:.1f}jt lembar"
+            elif net < 0 and abs(net_pct) > 20:
+                foreign_signal = -20
+                foreign_note   = f"🔴 Asing net SELL {abs(net)/1e6:.1f}jt lembar ({abs(net_pct):.0f}% vol)"
+            elif net < 0:
+                foreign_signal = -8
+                foreign_note   = f"🟡 Asing net sell minor {abs(net)/1e6:.1f}jt lembar"
+
+    score = max(0, min(score + foreign_signal - ihsg_penalty, 100))
 
     # ── BETA ─────────────────────────────────────
     beta = calc_beta(df, ihsg_df)
@@ -603,6 +666,8 @@ def score_ticker(df, ihsg_df=None):
         "Pattern": f"{p}/100",
         "IHSG Context": ihsg_context,
         "IHSG Penalty": ihsg_penalty,
+        "Foreign Flow": foreign_note,
+        "Foreign Signal": foreign_signal,
         "Beta (20D)": beta if beta else "—",
         "Weights": weights,
         "RSI Div": div,
@@ -703,7 +768,7 @@ def get_levels(df, score, regime, broker_fee_pct=0.30):
 def scan_one(args):
     (ticker, min_score, sig_filter, above_ema,
      min_vr, req_surge, req_macd, min_rsi, max_rsi,
-     min_daily_value, ihsg_df, broker_fee_pct) = args
+     min_daily_value, ihsg_df, broker_fee_pct, idx_eod) = args
     name = ticker.replace(".JK", "")
     try:
         df = fetch_df(ticker, "6mo")
@@ -727,7 +792,7 @@ def scan_one(args):
         if req_macd and macd_v <= sig_v:         return None, name, "MACD bearish"
         if vr_v < min_vr:                        return None, name, f"Vol {vr_v:.1f}x"
 
-        score, detail, regime, adx_v = score_ticker(df, ihsg_df)
+        score, detail, regime, adx_v = score_ticker(df, ihsg_df, idx_eod)
         if score < min_score:                    return None, name, f"Score {score}"
 
         entry, sl, tp, rr, signal, _ = get_levels(df, score, regime, broker_fee_pct)
@@ -766,6 +831,7 @@ def scan_one(args):
             "VolSuspect": "⚠️" if vol_suspect else "",
             "DailyVal":  f"Rp {avg_val/1e9:.1f}M",
             "IHSGNote":  detail.get("IHSG Context", "—"),
+            "Foreign":   detail.get("Foreign Flow", "—"),
         }, name, None
 
     except Exception as e:
@@ -872,6 +938,19 @@ with st.sidebar:
                                    ["Rp 5M", "Rp 10M", "Rp 50M", "Rp 100M"], index=1)
     min_val_map    = {"Rp 5M": 5e9, "Rp 10M": 10e9, "Rp 50M": 50e9, "Rp 100M": 100e9}
     min_daily_value = min_val_map[min_daily_val]
+
+    st.markdown("---")
+    st.markdown("**IDX EOD Data**")
+    idx_eod_file = st.file_uploader(
+        "Upload Ringkasan_Saham-YYYYMMDD.xlsx:",
+        type=["xlsx"],
+        help="Download dari idx.co.id → Data Pasar → Ringkasan Saham"
+    )
+    idx_eod = load_idx_eod(idx_eod_file) if idx_eod_file else {}
+    if idx_eod:
+        st.success(f"✅ EOD loaded: {len(idx_eod)} saham")
+    else:
+        st.caption("Belum ada data EOD — foreign flow tidak aktif")
 
     st.markdown("---")
     now_jkt = datetime.now(TZ_JKT)
@@ -1046,7 +1125,7 @@ with tab2:
     if st.button("🚀 MULAI SCAN", use_container_width=True, type="primary"):
         tickers = add_jk(universe)
         params  = (min_score, sig_filter, above_ema, min_vr, req_surge, req_macd,
-                   min_rsi, max_rsi, min_daily_value, ihsg_df_global, broker_fee)
+                   min_rsi, max_rsi, min_daily_value, ihsg_df_global, broker_fee, idx_eod)
         args    = [(t, *params) for t in tickers]
 
         prog  = st.progress(0)
@@ -1075,7 +1154,7 @@ with tab2:
             st.markdown(f"### Top {len(df_res)} Rekomendasi — {datetime.now(TZ_JKT).strftime('%d %b %Y %H:%M')} WIB")
 
             show_cols = ["Ticker","Score","Regime","Signal","Entry","SL","TP","R:R",
-                         "RSI","Vol","MACD","Div","Pattern","Beta","GapAvg","DailyVal","VolSuspect"]
+                         "RSI","Vol","MACD","Div","Pattern","Beta","GapAvg","DailyVal","Foreign","VolSuspect"]
             st.dataframe(df_res[show_cols], use_container_width=True, hide_index=True)
 
             st.markdown("---")
