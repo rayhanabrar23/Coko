@@ -3,3 +3,6 @@ pandas
 yfinance
 pandas-ta
 plotly
+numpy
+pytz
+openpyxl
