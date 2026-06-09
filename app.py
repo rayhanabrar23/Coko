@@ -17,8 +17,8 @@ import pytz
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="IDX Terminal v8",
-    page_icon="⚡",
+    page_title="DASHBOARD SCREENING STOCK ID",
+    page_icon="💵",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
@@ -887,7 +887,7 @@ with st.sidebar:
 # HEADER
 # ─────────────────────────────────────────────
 st.markdown("""
-<h1 style='text-align:center; color:#00bbff; margin-bottom:4px; letter-spacing:2px;'>IDX TERMINAL v8</h1>
+<h1 style='text-align:center; color:#00bbff; margin-bottom:4px; letter-spacing:2px;'>DASHBOARD SCREENING STOCK ID</h1>
 <p style='text-align:center; color:#445566; margin-bottom:1rem;'>
 Regime-Aware · Volume Direction · RSI Divergence · Position Sizing · Gap Analysis · Corp Action Check · IHSG Context
 </p>
