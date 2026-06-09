@@ -1383,20 +1383,33 @@ with tab2:
                 vol_suspect_warn = " ⚠️ <i>Volume data suspect (yfinance)</i>" if row.get('VolSuspect') else ""
                 div_note = " | 🔼 <b>RSI Bullish Divergence!</b>" if row['Div']=="🔼" else ""
 
+                # ── Ambil data dulu, BARU build HTML ──
+                df_tmp = fetch_df(jk(row['Ticker']), "6mo")
+
                 # Position sizing
                 max_lot, pos_val, actual_risk, fee_total = calc_position_size(
                     modal_total, risk_per_trade,
-                    float(row['Entry']), float(row['SL']),
-                    broker_fee
+                    float(row['Entry']), float(row['SL']), broker_fee
                 )
 
-                # Corporate action check (async-ish via cache)
+                # Corporate action
                 corp_warns = check_corporate_actions(jk(row['Ticker']))
 
-                # Overnight gap stats
-                df_tmp = fetch_df(jk(row['Ticker']), "6mo")
+                # Gap stats
                 g_stats = overnight_gap_stats(df_tmp) if df_tmp is not None else None
 
+                # Reasoning
+                if df_tmp is not None:
+                    _, detail_tmp, _, _ = score_ticker(df_tmp, ihsg_df_global, idx_eod)
+                    reasoning = generate_reasoning(
+                        jk(row['Ticker']), df_tmp, row['Score'],
+                        detail_tmp, row['Regime'].lower(),
+                        ihsg_df_global, sector_perfs
+                    )
+                else:
+                    reasoning = ["— Data tidak tersedia —"]
+
+                # ── Build semua HTML fragments ──
                 sizing_html = f"""
                 <div class='sizing-box'>
                     <div style='font-size:12px; color:#00aa44; font-weight:700; margin-bottom:6px;'>
@@ -1409,7 +1422,7 @@ with tab2:
                         <div><span style='color:#667'>Est. Biaya</span><br><b style='color:#ffcc00'>Rp {fee_total:,.0f}</b></div>
                     </div>
                 </div>
-                """ if max_lot > 0 else "<div class='sizing-box' style='color:#ff4466'>⚠️ Modal tidak cukup untuk 1 lot dengan risk parameter ini.</div>"
+                """ if max_lot > 0 else "<div class='sizing-box' style='color:#ff4466'>⚠️ Modal tidak cukup untuk 1 lot.</div>"
 
                 gap_html = ""
                 if g_stats:
@@ -1419,28 +1432,11 @@ with tab2:
                         avg ±{g_stats['avg_abs']}% | max up +{g_stats['max_up']}% | max down {g_stats['max_down']}%
                         | gap >1% terjadi {g_stats['gap_up_pct']}% hari naik / {g_stats['gap_down_pct']}% hari turun
                         {'| ⚠️ <b>Saham ini sering gap besar!</b>' if g_stats['freq_large'] > 20 else ''}
-                    </div>
-                    """
+                    </div>"""
 
                 corp_html = "".join([f"<div class='corp-warn'>{w}</div>" for w in corp_warns])
-                
-                # Generate reasoning — pakai sector_perfs yang sudah dihitung di atas
-                if df_tmp is not None:
-                    _, detail_tmp, _, _ = score_ticker(df_tmp, ihsg_df_global, idx_eod)
-                    reasoning = generate_reasoning(
-                        jk(row['Ticker']), df_tmp, row['Score'],
-                        detail_tmp, row['Regime'].lower(),
-                        ihsg_df_global, sector_perfs
-                    )
-                else:
-                    reasoning = ["— Data tidak tersedia untuk reasoning —"]
 
-                reasoning_html = "".join([
-                    f"<div style='padding:4px 0; font-size:12px; color:#aac; "
-                    f"border-bottom:1px solid #111d2e;'>{r}</div>"
-                    for r in reasoning
-                ])
-
+                # ── Render card utama ──
                 st.markdown(f"""
                 <div class='reco-card'>
                     <div style='display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px'>
@@ -1470,8 +1466,8 @@ with tab2:
                 </div>
                 """, unsafe_allow_html=True)
 
-                # Reasoning pakai st.expander — tidak bisa nested dalam st.markdown
-                with st.expander(f"📋 Kenapa {row['Ticker']} masuk rekomendasi? (klik untuk buka)"):
+                # ── Reasoning di expander native Streamlit ──
+                with st.expander(f"📋 Kenapa {row['Ticker']} masuk rekomendasi?"):
                     for r in reasoning:
                         icon_color = "#00ff99" if "✅" in r else ("#ffcc00" if "🟡" in r else ("#ff4466" if "⚠️" in r else "#aac"))
                         st.markdown(
