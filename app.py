@@ -71,56 +71,85 @@ body, .stApp { background-color: #07090f; color: #d0d8e8; }
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-# UNIVERSE DATA
+# UNIVERSE DATA — dari IDX resmi per 09 Jun 2026
 # ─────────────────────────────────────────────
-IDX30 = ["AADI","ADRO","AMMN","ANTM","AMRT","ASII","BBCA","BBNI","BBRI","BBTN",
-         "BMRI","BRIS","BUKA","CPIN","EXCL","GOTO","ICBP","INCO","INDF","ISAT",
-         "ITMG","KLBF","MDKA","MEDC","MIKA","PGEO","PTBA","TLKM","TOWR","UNTR"]
 
-LQ45 = list(dict.fromkeys(IDX30 + [
-    "ACES","AKRA","ARTO","BELI","BNGA","BSDE","CTRA","EMTK","GGRM","HMSP",
-    "INTP","JSMR","MAPI","MYOR","PGAS","PNBN","PWON","SMGR","TBIG","TINS",
-    "TKIM","UNVR","HEAL","BYAN","CMRY","DCII","DSSA","NCKL","INKP","SILO"]))[:45]
+# Konstituen resmi per evaluasi Apr 2026 (berlaku 4 Mei – 31 Jul 2026)
+IDX30 = ["AADI","ADMR","ADRO","AMRT","ANTM","ASII","BBCA","BBNI","BBRI","BMRI",
+         "BRPT","BUMI","CPIN","EMTK","EXCL","GOTO","ICBP","INCO","INDF","INKP",
+         "JPFA","KLBF","MBMA","MDKA","MEDC","PGAS","PGEO","PTBA","TLKM","TOWR",
+         "UNTR","UNVR"]
 
-IDX80_EXTRA = ["AVIA","BDMN","BUMI","DEWA","ENRG","GEMS","JPFA","MTEL","NISP",
-               "SMRA","SSIA","TAPG","TCPI","SIDO","BRPT","FILM","CUAN","VKTR",
-               "SOHO","MDIY","BSIM","BIPI","MAPI","PNBN","INKP","MYOR","CBDK","GGRM"]
-IDX80 = list(dict.fromkeys(LQ45 + IDX80_EXTRA))[:80]
+LQ45 = ["AADI","ADMR","ADRO","AKRA","AMMN","AMRT","ANTM","ASII","BBCA","BBNI",
+        "BBRI","BBTN","BMRI","BRPT","BUMI","CPIN","CUAN","DEWA","EMTK","ESSA",
+        "EXCL","GOTO","HRTA","ICBP","INCO","INDF","INKP","ISAT","ITMG","JPFA",
+        "KLBF","MAPI","MBMA","MDKA","MEDC","PGAS","PGEO","PTBA","SCMA","SMGR",
+        "TLKM","TOWR","UNTR","UNVR","WIFI"]
+
+IDX80 = list(dict.fromkeys(IDX30 + LQ45 + [
+    "ACES","AKRA","AMMN","ARTO","BBHI","BBTN","BDMN","BELI","BNGA","BRIS",
+    "BSDE","CTRA","DCII","DSSA","GEMS","GGRM","HEAL","HMSP","INTP","ISAT",
+    "ITMG","JSMR","KLBF","MAPI","MDKA","MIKA","MTEL","MYOR","NCKL","NISP",
+    "PNBN","PWON","SILO","SMGR","SMRA","SSIA","TAPG","TBIG","TINS","TOWR"
+]))[:80]
 
 IDX_HIDIV20 = ["ADRO","ANTM","ASII","BBCA","BBNI","BBRI","BMRI","CPIN","GGRM","HMSP",
                "INDF","ITMG","KLBF","MEDC","PGAS","PTBA","SMGR","TLKM","UNTR","UNVR"]
 
-IDX_GROWTH30 = ["ARTO","BELI","BRIS","BUKA","CMRY","DCII","DSSA","EMTK","GOTO","HEAL",
-                "MIKA","MDKA","MTEL","NCKL","PGEO","SILO","TBIG","TOWR","VKTR","AMMN",
-                "AADI","CUAN","BRMS","MBMA","TCPI","BREN","PANI","ARCO","CBDK","PGUN"]
+IDX_GROWTH30 = ["ARTO","BELI","BREN","BRIS","BUKA","CBDK","CMRY","CUAN","DCII","DEWA",
+                "DSSA","EMTK","GOTO","HEAL","HRTA","MIKA","MDKA","MTEL","NCKL","PGEO",
+                "SILO","TBIG","TOWR","VKTR","AMMN","AADI","BRMS","MBMA","TCPI","WIFI"]
 
-IDX_SMC = ["ACES","AKRA","BDMN","BNGA","BSDE","CTRA","INTP","JPFA","JSMR","MAPI",
-           "MYOR","NISP","PNBN","PWON","SMGR","SMRA","SSIA","TAPG","TINS","SIDO",
-           "PYFA","SOHO","FILM","AVIA","BBHI","GEMS","BSIM","MDIY","MEGA","BBTN"]
+# Sektor resmi IDX — 11 sektor
+SECTORS = {
+    "Energy":                  ["ABMM","AKRA","AADI","ADRO","BIPI","BSSR","BULL","BUMI","BYAN","CUAN","DEWA","DOID","DSSA","ELSA","ENRG","GEMS","HRUM","INDY","ITMG","MBAP","MEDC","MYOH","PGAS","PTBA","PTRO","RAJA","TCPI","TOBA","TPMA","WINS"],
+    "Financials":              ["ARTO","BBCA","BBHI","BBNI","BBRI","BBTN","BDMN","BJBR","BJTM","BKSW","BMRI","BNGA","BNII","BNLI","BRIS","BSIM","BTPN","MEGA","NISP","NOBU","PNBN","PNBS","BFIN","ADMF","AGRO","ADMG","SMMA","SRTG"],
+    "Basic Materials":         ["AMMN","ANTM","BRMS","BRPT","ESSA","INCO","INKP","INTP","ISSP","MBMA","MDKA","NCKL","NIKL","SMGR","SMCB","TINS","TKIM","TPIA","ZINC","AKPI","ALDO","ALKA","DPNS","EKAD","FASW","IGAR","INAI","FPNI","SMBR","SPMA"],
+    "Consumer Cyclicals":      ["ACES","AUTO","BRAM","CSAP","ERAA","FAST","GJTL","IMAS","INDS","LPPF","MAPI","MAPA","MAPB","MNCN","MPMX","RALS","SCMA","SMSM","VKTR","MDIY","FILM","HRTA","WOOD","BOGA","PJAA","SHID","BMTR","PBRX"],
+    "Consumer Non-Cyclicals":  ["AALI","AMRT","BISI","CEKA","CPIN","DLTA","GGRM","HMSP","ICBP","INDF","JPFA","KLBF","LSIP","MYOR","ROTI","SGRO","SIDO","SIMP","SKBM","SMAR","SSMS","STTP","TAPG","TBLA","TCID","ULTJ","UNVR","CMRY","GOOD","KEJU"],
+    "Healthcare":              ["DVLA","HEAL","INAF","KAEF","KLBF","MERK","MIKA","PYFA","SAME","SIDO","SILO","SOHO","TSPC","BMHS","RSGK","PRDA","PEHA","IRRA","MEDS","LABS","CARE","DGNS"],
+    "Industrials":             ["AMFG","ASII","ARNA","ASGR","HEXA","IMPC","JECC","KBLI","KBLI","LION","SCCO","TOTO","UNTR","VOKS","ZBRA","MARK","CAKK","SMIL","BOLT","SMSM"],
+    "Infrastructures":         ["BREN","DCII","EXCL","IBST","ISAT","JSMR","LINK","MTEL","PGEO","POWR","SSIA","SUPR","TBIG","TLKM","TOWR","WIKA","WSKT","ADHI","PTPP","TOTL","ACST","JKON","NRCA","MORA","GHON","INET","ARKO"],
+    "Properties & RE":         ["BSDE","CBDK","CTRA","DMAS","DUTI","INPP","JRPT","KIJA","LPCK","LPKR","MKPI","MMLP","MTLA","PANI","PWON","RDTX","SMRA","APLN","ASRI","BEST","DART","DILD","EMDE","GMTD","GPRA","LPLI","MDLN","PLIN","CITY","URBN"],
+    "Technology":              ["ATIC","BELI","BUKA","DCII","DMMX","EMTK","GOTO","KIOS","LUCK","MCAS","MLPT","MTDL","NFCX","PTSN","WIFI","AXIO","CHIP","CYBR","EDGE","KREN","TECH","AWAN"],
+    "Transportation & Logistic":["ASSA","BIRD","GIAA","IMJS","NELY","SAFE","SMDR","TMAS","WEHA","HELI","TRUK","TNCA","SAPX","JAYA","LAJU","GTRA","KLAS","BLOG"],
+}
+
+# Proxy untuk heatmap sektor (pilih saham paling liquid per sektor)
+SECTOR_PROXY = {
+    "Energy":                   "ADRO",
+    "Financials":               "BBCA",
+    "Basic Materials":          "ANTM",
+    "Consumer Cyclicals":       "MAPI",
+    "Consumer Non-Cyclicals":   "ICBP",
+    "Healthcare":               "KLBF",
+    "Industrials":              "ASII",
+    "Infrastructures":          "TLKM",
+    "Properties & RE":          "BSDE",
+    "Technology":               "GOTO",
+    "Transportation & Logistic":"BIRD",
+}
+
+# Saham Pemantauan Khusus — auto-exclude dari scanner
+PEMANTAUAN_KHUSUS = {
+    "ABBA","ACST","AKKU","ALMI","ALTO","ARTI","ASMI","BATA","BEKS","BHIT",
+    "BIKA","BIMA","BLTA","BLTZ","BSWD","BTEK","BTEL","CANI","CMPP","CNKO",
+    "DEWA","DOID","ELTY","ENRG","ETWA","FPNI","GIAA","GTBO","HADE","IATA",
+    "IIKP","IKAI","INAF","INDX","INRU","KARW","KBRI","KOPI","KRAS","LAPD",
+    "LPIN","MDRN","META","MFMI","MIRA","MITI","MYTX","NIRO","OKAS","PANR",
+    "PKPK","PSAB","PSKT","RIMO","RIGS","SAFE","SDMU","SILI","SIMA","SMRU",
+    "SOCI","SONA","SQMI","SSTM","SUGI","SULI","TAXI","TFCO","TIRT","TRAM",
+    "TRIO","UNIT","UNSP","VIVA","WAPO","WSKT","WTON","YPAS","ZBRA","BBYB",
+}
 
 UNIVERSES = {
-    "IDX30 — Blue Chip (30)":         IDX30,
+    "IDX30 — Blue Chip":              IDX30,
     "LQ45 — Liquid 45":               LQ45,
     "IDX80 — Broad Market":           IDX80,
     "IDX High Dividend 20":           IDX_HIDIV20,
     "IDX Growth 30":                  IDX_GROWTH30,
-    "IDX SMC — Small/Mid Cap":        IDX_SMC,
-    "ALL Combined (~180 unik)":       list(dict.fromkeys(IDX80 + IDX_GROWTH30 + IDX_SMC)),
+    "ALL Sektor (957 saham)":         list(dict.fromkeys([t for tickers in SECTORS.values() for t in tickers])),
 }
-
-SECTORS = {
-    "Finance":    ["BBCA","BBRI","BMRI","BBNI","BRIS","ARTO","BNGA","PNBN","MEGA","BDMN","NISP","BBTN"],
-    "Energy":     ["ADRO","ITMG","PTBA","MEDC","AKRA","PGAS","GEMS","AADI","BYAN","DSSA","TCPI","INDY"],
-    "Healthcare": ["MIKA","HEAL","SILO","KLBF","SIDO","PYFA","SOHO"],
-    "Basic Mat":  ["ANTM","TINS","MDKA","SMGR","INTP","TPIA","INCO","NCKL","AMMN","BRMS"],
-    "Consumer":   ["ACES","MAPI","AMRT","ICBP","INDF","GGRM","HMSP","UNVR","MYOR","CPIN","CMRY","AVIA"],
-    "Infra/Telco":["TLKM","ISAT","EXCL","TOWR","TBIG","JSMR","MTEL","PGAS","PGEO"],
-    "Property":   ["BSDE","PWON","CTRA","SMRA","SSIA","CBDK","PANI","MKPI"],
-    "Tech/Digital":["GOTO","BUKA","EMTK","DCII","BELI","BBHI","ARTO","VKTR"],
-}
-
-SECTOR_PROXY = {"Finance":"BBCA","Energy":"ADRO","Healthcare":"KLBF","Basic Mat":"ANTM",
-                "Consumer":"ICBP","Infra/Telco":"TLKM","Property":"BSDE","Tech/Digital":"GOTO"}
 
 # Biaya transaksi per broker (roundtrip %)
 BROKER_FEES = {
@@ -773,6 +802,8 @@ def scan_one(args):
     try:
         df = fetch_df(ticker, "6mo")
         if df is None: return None, name, "Data kosong"
+        if name in PEMANTAUAN_KHUSUS:
+            return None, name, "Pemantauan Khusus — skip"
 
         # FIX: Filter daily value (likuiditas)
         avg_val = df.attrs.get('avg_daily_value', 0)
