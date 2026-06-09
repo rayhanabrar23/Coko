@@ -1061,6 +1061,13 @@ with tab4:
     if not base_rows:
         st.info("Belum ada watchlist. Jalankan scanner dulu atau tambah ticker manual di atas.")
     else:
+        # Deduplikasi — kalau ticker sama dari scanner + manual, scanner menang
+        seen = {}
+        for row in base_rows:
+            if row["ticker"] not in seen:
+                seen[row["ticker"]] = row
+        base_rows = list(seen.values())
+
         st.divider()
         st.markdown("#### Input IEP per Saham")
         st.caption("Harga IEP terlihat di Ajaib pada fase Pre-Opening (08:45–09:00 WIB).")
@@ -1076,12 +1083,12 @@ with tab4:
             except:
                 prev_closes[row["ticker"]] = row["entry"]
 
-        # Input grid
+        # Input grid — key pakai index agar tidak duplikat
         cols_per_row = 3
         for i in range(0, len(base_rows), cols_per_row):
             chunk = base_rows[i:i+cols_per_row]
             cols  = st.columns(cols_per_row)
-            for col, row in zip(cols, chunk):
+            for col, (row_idx, row) in zip(cols, [(i+j, base_rows[i+j]) for j in range(len(chunk))]):
                 with col:
                     prev_c = prev_closes.get(row["ticker"], row["entry"])
                     iep_val = col.number_input(
@@ -1089,7 +1096,7 @@ with tab4:
                         min_value=0,
                         value=int(prev_c),
                         step=1,
-                        key=f"iep_{row['ticker']}"
+                        key=f"iep_{row_idx}_{row['ticker']}"
                     )
                     iep_inputs[row["ticker"]] = iep_val
 
