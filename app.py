@@ -1677,10 +1677,226 @@ with tab3:
             fig.add_trace(go.Scatter(x=df.index, y=df['vol_ma20'],
                                      line=dict(color='yellow', width=1), name="Vol MA20"), row=3, col=1)
 
+            # ── Highlight candle penting ──────────────────
+            pattern_markers = []
+            for idx_i in range(2, len(df)):
+                row_c = df.iloc[idx_i]
+                o_c, h_c, l_c, c_c = sf(row_c['open']), sf(row_c['high']), sf(row_c['low']), sf(row_c['close'])
+                body_c = abs(c_c - o_c)
+                rng_c  = h_c - l_c
+                if rng_c <= 0: continue
+                uw_c = h_c - max(c_c, o_c)
+                lw_c = min(c_c, o_c) - l_c
+                pb_c = abs(sf(df.iloc[idx_i-1]['close']) - sf(df.iloc[idx_i-1]['open']))
+                label_c, color_c, sym_c = None, None, None
+                if lw_c >= 2*body_c and uw_c <= 0.3*body_c and body_c/rng_c > 0.05:
+                    label_c, color_c, sym_c = "🔨 Hammer", "#00ff99", "triangle-up"
+                elif uw_c >= 2*body_c and lw_c <= 0.3*body_c:
+                    label_c, color_c, sym_c = "⬆️ Shooting Star", "#ff4466", "triangle-down"
+                elif body_c/rng_c < 0.1:
+                    label_c, color_c, sym_c = "✳️ Doji", "#ffcc00", "diamond"
+                elif (sf(df.iloc[idx_i-1]['close']) < sf(df.iloc[idx_i-1]['open'])
+                      and c_c > o_c and body_c > pb_c):
+                    label_c, color_c, sym_c = "🟢 Bull Engulfing", "#00ff99", "star"
+                elif (sf(df.iloc[idx_i-1]['close']) > sf(df.iloc[idx_i-1]['open'])
+                      and c_c < o_c and body_c > pb_c):
+                    label_c, color_c, sym_c = "🔴 Bear Engulfing", "#ff4466", "star"
+                elif idx_i >= 3:
+                    o3,c3 = sf(df.iloc[idx_i-2]['open']), sf(df.iloc[idx_i-2]['close'])
+                    o2,c2 = sf(df.iloc[idx_i-1]['open']), sf(df.iloc[idx_i-1]['close'])
+                    if c3 < o3 and abs(c2-o2) < 0.003*c2 and c_c > o_c:
+                        label_c, color_c, sym_c = "🌅 Morning Star", "#00ff99", "star"
+                    elif c3 > o3 and abs(c2-o2) < 0.003*c2 and c_c < o_c:
+                        label_c, color_c, sym_c = "🌇 Evening Star", "#ff4466", "star"
+                if label_c:
+                    pattern_markers.append({
+                        "x": df.index[idx_i],
+                        "y": l_c * 0.985 if color_c == "#00ff99" else h_c * 1.015,
+                        "label": label_c,
+                        "color": color_c,
+                        "sym": sym_c,
+                        "pos": "bottom center" if color_c == "#00ff99" else "top center"
+                    })
+
+            if pattern_markers:
+                fig.add_trace(go.Scatter(
+                    x=[m["x"] for m in pattern_markers],
+                    y=[m["y"] for m in pattern_markers],
+                    mode="markers+text",
+                    marker=dict(
+                        symbol=[m["sym"] for m in pattern_markers],
+                        color=[m["color"] for m in pattern_markers],
+                        size=12, line=dict(width=1, color="#ffffff")
+                    ),
+                    text=[m["label"] for m in pattern_markers],
+                    textposition=[m["pos"] for m in pattern_markers],
+                    textfont=dict(size=9, color="#ffffff"),
+                    name="Pattern",
+                    hovertemplate="%{text}<extra></extra>",
+                ), row=1, col=1)
+
             fig.update_layout(height=680, template='plotly_dark',
                               xaxis_rangeslider_visible=False,
                               margin=dict(l=0,r=0,t=30,b=0), showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
+
+            # ── Penjelasan chart ──────────────────────────
+            with st.expander("📖 Cara Baca Grafik Ini", expanded=False):
+                last_r   = df.iloc[-1]
+                cl_r     = sf(last_r['close'])
+                e20_r    = sf(last_r['ema20'])
+                e50_r    = sf(last_r['ema50'])
+                e200_r   = sf(last_r['ema200'])
+                bb_u_r   = sf(last_r['bb_u'])
+                bb_l_r   = sf(last_r['bb_l'])
+                bb_m_r   = sf(last_r['bb_m'])
+                bb_w_r   = sf(last_r['bb_width'])
+                rsi_r    = sf(last_r['rsi'])
+                adx_r    = sf(last_r['adx'])
+                dmp_r    = sf(last_r['dmp'])
+                dmn_r    = sf(last_r['dmn'])
+                vr_r     = sf(last_r['vol_ratio'])
+
+                # EMA status
+                if cl_r > e20_r > e50_r > e200_r > 0:
+                    ema_status = "✅ Full alignment — harga di atas semua EMA. Struktur uptrend sempurna."
+                elif cl_r > e20_r > e50_r:
+                    ema_status = "🟡 Harga di atas EMA20 & EMA50, tapi EMA200 belum aligned. Uptrend jangka menengah."
+                elif cl_r > e20_r:
+                    ema_status = "🟡 Harga di atas EMA20 saja. Trend jangka pendek, perlu konfirmasi lebih."
+                else:
+                    ema_status = "⚠️ Harga di bawah EMA20. Struktur belum bullish — tunggu recovery."
+
+                # BB status
+                bb_pct = (cl_r - bb_l_r) / (bb_u_r - bb_l_r) * 100 if (bb_u_r - bb_l_r) > 0 else 50
+                if cl_r <= bb_l_r * 1.005:
+                    bb_status = f"✅ Harga di BB Lower ({bb_pct:.0f}%) — area oversold, potensi reversal/bouncing"
+                elif cl_r >= bb_u_r * 0.995:
+                    bb_status = f"⚠️ Harga di BB Upper ({bb_pct:.0f}%) — area overbought, waspadai pullback"
+                elif bb_w_r < 0.03:
+                    bb_status = f"✅ BB Squeeze (width {bb_w_r:.3f}) — volatilitas sangat rendah, potensi breakout besar"
+                else:
+                    bb_status = f"🟡 Harga di tengah BB ({bb_pct:.0f}%) — netral"
+
+                # RSI status
+                if rsi_r < 30:
+                    rsi_status = f"✅ RSI {rsi_r:.0f} — Oversold, potensi reversal ke atas"
+                elif rsi_r < 45:
+                    rsi_status = f"✅ RSI {rsi_r:.0f} — Recovery zone, momentum mulai membaik"
+                elif rsi_r <= 70:
+                    rsi_status = f"🟡 RSI {rsi_r:.0f} — Zona normal/sehat"
+                else:
+                    rsi_status = f"⚠️ RSI {rsi_r:.0f} — Overbought, hati-hati potensi koreksi"
+
+                # ADX status
+                if adx_r > 30 and dmp_r > dmn_r:
+                    adx_status = f"✅ ADX {adx_r:.0f} — Trend kuat ke atas (DI+ {dmp_r:.0f} > DI- {dmn_r:.0f})"
+                elif adx_r > 30 and dmn_r > dmp_r:
+                    adx_status = f"⚠️ ADX {adx_r:.0f} — Trend kuat ke bawah (DI- {dmn_r:.0f} > DI+ {dmp_r:.0f})"
+                elif adx_r > 20:
+                    adx_status = f"🟡 ADX {adx_r:.0f} — Trend mulai terbentuk"
+                else:
+                    adx_status = f"⚠️ ADX {adx_r:.0f} — Pasar sideways/ranging, sinyal trend tidak valid"
+
+                # Vol status
+                if vr_r >= 2.0:
+                    vol_status = f"✅ Volume {vr_r:.1f}x rata-rata — surge, konfirmasi kuat"
+                elif vr_r >= 1.3:
+                    vol_status = f"🟡 Volume {vr_r:.1f}x rata-rata — di atas normal"
+                else:
+                    vol_status = f"⚠️ Volume {vr_r:.1f}x rata-rata — sepi, sinyal kurang meyakinkan"
+
+                n_patterns = len(pattern_markers)
+
+                st.markdown(f"""
+                <div style='background:#0a1020; border-radius:10px; padding:16px; font-size:13px; color:#ccd;'>
+
+                <div style='color:#00bbff; font-weight:700; font-size:14px; margin-bottom:12px;'>
+                    📊 Kondisi Chart {target.replace(".JK","")} Saat Ini
+                </div>
+
+                <div style='display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:14px;'>
+                    <div style='background:#0d1628; border-radius:8px; padding:10px;'>
+                        <div style='color:#ffaa33; font-weight:700; margin-bottom:6px;'>📈 EMA (Garis Tren)</div>
+                        <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                        🟠 EMA20 = tren jangka pendek (20 hari)<br>
+                        🟣 EMA50 = tren jangka menengah (50 hari)<br>
+                        🔴 EMA200 = tren jangka panjang (200 hari)
+                        </div>
+                        <div style='color:#ddd;'>{ema_status}</div>
+                    </div>
+                    <div style='background:#0d1628; border-radius:8px; padding:10px;'>
+                        <div style='color:#336699; font-weight:700; margin-bottom:6px;'>〰️ Bollinger Bands</div>
+                        <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                        Garis biru putus-putus = batas atas/bawah volatilitas normal.<br>
+                        Harga di luar band = kondisi ekstrem (overbought/oversold).<br>
+                        Band menyempit = squeeze, siap breakout.
+                        </div>
+                        <div style='color:#ddd;'>{bb_status}</div>
+                    </div>
+                    <div style='background:#0d1628; border-radius:8px; padding:10px;'>
+                        <div style='color:#bb77ff; font-weight:700; margin-bottom:6px;'>📉 RSI (Momentum)</div>
+                        <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                        Garis ungu di panel tengah. Range 0–100.<br>
+                        &lt;30 = oversold (murah, potensi naik).<br>
+                        &gt;70 = overbought (mahal, potensi koreksi).<br>
+                        Garis merah = 70 | Garis hijau = 30.
+                        </div>
+                        <div style='color:#ddd;'>{rsi_status}</div>
+                    </div>
+                    <div style='background:#0d1628; border-radius:8px; padding:10px;'>
+                        <div style='color:#ffaa33; font-weight:700; margin-bottom:6px;'>〽️ ADX (Kekuatan Trend)</div>
+                        <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                        Garis oranye putus-putus di panel RSI.<br>
+                        &gt;25 = trend sedang kuat dan valid.<br>
+                        &lt;20 = pasar ranging/sideways — sinyal EMA & MACD kurang reliabel.<br>
+                        Garis kuning putus = ADX 25.
+                        </div>
+                        <div style='color:#ddd;'>{adx_status}</div>
+                    </div>
+                </div>
+
+                <div style='background:#0d1628; border-radius:8px; padding:10px; margin-bottom:10px;'>
+                    <div style='color:#ffcc00; font-weight:700; margin-bottom:6px;'>📊 Volume (Panel Bawah)</div>
+                    <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                    Batang hijau = hari closing naik | Batang merah = hari closing turun.<br>
+                    Garis kuning = rata-rata volume 20 hari. Batang lebih tinggi dari garis kuning = volume di atas normal.<br>
+                    Volume surge + candle hijau = akumulasi. Volume surge + candle merah = distribusi (⚠️ sinyal bahaya).
+                    </div>
+                    <div style='color:#ddd;'>{vol_status}</div>
+                </div>
+
+                <div style='background:#0d1628; border-radius:8px; padding:10px; margin-bottom:10px;'>
+                    <div style='color:#ffffff; font-weight:700; margin-bottom:6px;'>🕯️ Garis Horizontal di Chart</div>
+                    <div style='color:#889; font-size:11px; margin-bottom:4px;'>
+                    🟢 Garis hijau putus-putus = <b>Take Profit (TP)</b> — target harga keluar dengan profit.<br>
+                    🟡 Garis kuning putus-putus = <b>Entry</b> — harga ideal masuk posisi.<br>
+                    🔴 Garis merah putus-putus = <b>Stop Loss (SL)</b> — batas maksimal kerugian, wajib dipasang saat beli.
+                    </div>
+                </div>
+
+                <div style='background:#0d1628; border-radius:8px; padding:10px;'>
+                    <div style='color:#ffffff; font-weight:700; margin-bottom:6px;'>
+                        🕯️ Pola Candlestick Terdeteksi ({n_patterns} marker di chart)
+                    </div>
+                    <div style='color:#889; font-size:11px; margin-bottom:6px;'>
+                    Marker muncul di atas/bawah candle yang memiliki pola signifikan.<br>
+                    Marker hijau (⬆) = pola bullish | Marker merah (⬇) = pola bearish | Kuning = netral/doji
+                    </div>
+                    <div style='display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px;'>
+                        <div><span style='color:#00ff99'>🔨 Hammer</span> — ekor panjang bawah, potensi reversal naik kuat</div>
+                        <div><span style='color:#ff4466'>⬆️ Shooting Star</span> — ekor panjang atas, potensi reversal turun</div>
+                        <div><span style='color:#00ff99'>🟢 Bull Engulfing</span> — candle hijau menelan candle merah sebelumnya</div>
+                        <div><span style='color:#ff4466'>🔴 Bear Engulfing</span> — candle merah menelan candle hijau sebelumnya</div>
+                        <div><span style='color:#00ff99'>🌅 Morning Star</span> — 3 candle: turun → doji → naik, reversal bullish</div>
+                        <div><span style='color:#ff4466'>🌇 Evening Star</span> — 3 candle: naik → doji → turun, reversal bearish</div>
+                        <div><span style='color:#ffcc00'>✳️ Doji</span> — buka = tutup, pasar ragu-ragu, perhatikan candle berikutnya</div>
+                        <div><span style='color:#00ff99'>💪 Bull Marubozu</span> — candle penuh hijau tanpa ekor, momentum kuat</div>
+                    </div>
+                </div>
+
+                </div>
+                """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════
 # TAB 4 — PRE-MARKET CHECK
