@@ -9,7 +9,12 @@
     "entry": 12189.0,
     "sl": 11634.0,
     "tp": 13410.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 12189.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_BBRI",
@@ -21,7 +26,12 @@
     "entry": 3291.0,
     "sl": 3180.0,
     "tp": 3440.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 3291.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_JPFA",
@@ -33,7 +43,12 @@
     "entry": 2285.0,
     "sl": 2161.0,
     "tp": 2558.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 2285.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_MEDC",
@@ -45,7 +60,12 @@
     "entry": 1502.0,
     "sl": 1412.0,
     "tp": 1645.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 1502.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_PTBA",
@@ -57,7 +77,12 @@
     "entry": 3093.0,
     "sl": 2943.0,
     "tp": 3423.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 3093.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_UNTR",
@@ -69,7 +94,12 @@
     "entry": 25374.0,
     "sl": 24428.0,
     "tp": 26975.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 25374.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_AKRA",
@@ -81,7 +111,12 @@
     "entry": 1458.0,
     "sl": 1393.0,
     "tp": 1601.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 1458.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_CUAN",
@@ -93,7 +128,12 @@
     "entry": 931.0,
     "sl": 850.0,
     "tp": 1109.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 931.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-17_ITMG",
@@ -105,6 +145,11 @@
     "entry": 26102.0,
     "sl": 25385.0,
     "tp": 27679.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 26102.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   }
 ]
