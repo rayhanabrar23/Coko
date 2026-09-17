@@ -40,7 +40,6 @@ def send_discord(message):
   if not webhook_url:
     print("DISCORD_WEBHOOK_URL tidak ditemukan di environment variables.")
     return
-  # Discord menggunakan format json dengan key 'content'
   payload = {"content": message}
   response = requests.post(webhook_url, json=payload)
   if response.status_code != 204:
@@ -49,7 +48,7 @@ def send_discord(message):
 
 def main():
   today = datetime.now(TZ_JKT).strftime("%Y-%m-%d")
-  print(f"Menjalankan automated scan untuk tanggal: {today}")
+  print(f"Menjalankan automated scan & P/L check untuk tanggal: {today}")
 
   # 1. Update status trade yang masih PENDING atau OPEN
   logs = load_log()
@@ -59,7 +58,7 @@ def main():
       continue
     result = evaluate_trade(
         t, fee_pct=0.30, hold_days_max=HOLD_DAYS_MAX_DEFAULT
-    )  #
+    )  #[cite: 2]
     t.update({
         "status": result["status"],
         "note": result.get("note", ""),
@@ -130,20 +129,68 @@ def main():
 
   save_log(logs)
 
-  # 4. Susun pesan dan kirim ke Discord
-  msg = f"📊 **IDX Screener Daily Report ({today})**\n"
+  # 4. Hitung Statistik Performa (Closed & Open Trades)
+  closed = [l for l in logs if l["status"] in ("WIN", "LOSS", "BREAKEVEN")]
+  open_trades = [l for l in logs if l["status"] == "OPEN"]
+
+  pnl_summary = "📊 *Belum ada trade yang closed.*"
+  if closed:
+    wins = [l for l in closed if l["status"] == "WIN"]
+    win_rate = round(len(wins) / len(closed) * 100, 1)
+    avg_pnl = round(sum(l.get("pnl_pct", 0) for l in closed) / len(closed), 2)
+    total_closed = len(closed)
+
+    # Deteksi trade yang selesai hari ini
+    closed_today = [l for l in closed if l.get("exit_date") == today]
+    today_pnl_str = ""
+    if closed_today:
+      today_items = [
+          f"• `{c['ticker']}`: **{c['pnl_pct']:+.2f}%** ({c['status'])"
+          for c in closed_today
+      ]
+      today_pnl_str = (
+          "\n🎯 **Selesai (*Closed*) Hari Ini:**\n"
+          + "\n".join(today_items)
+          + "\n"
+      )
+
+    pnl_summary = (
+        f"📈 **Rekap Performa Keseluruhan:**\n"
+        f"• Win Rate: **{win_rate}%** ({len(wins)} Win dari {total_closed} Trade"
+        f" Closed)\n"
+        f"• Rata-rata Net PnL: **{avg_pnl:+.2f}%**"
+        f"{today_pnl_str}"
+    )
+
+  # 5. Susun format pesan laporan ke Discord
+  msg = f"📊 **IDX Screener Daily Report ({today})**\n\n"
+
   if new_signals_msg:
     msg += (
-        "🚨 **Sinyal Baru Ditemukan:**\n"
+        "🚨 **Sinyal Baru Ditemukan Hari Ini:**\n"
         + "\n".join(new_signals_msg)
         + "\n\n"
     )
   else:
     msg += "ℹ️ Tidak ada sinyal BUY baru hari ini.\n\n"
 
+  msg += f"{pnl_summary}\n\n"
+
+  if open_trades:
+    open_items = [
+        f"• `{t['ticker']}`: PnL sementara **{t.get('pnl_pct', 0):+.2f}%**"
+        for t in open_trades
+    ]
+    msg += (
+        f"🟢 **Posisi Aktif (*Open*):** {len(open_trades)} emiten\n"
+        + "\n".join(open_items)
+        + "\n\n"
+    )
+
   msg += f"🔄 Status {updated_count} trade aktif/pending telah diperbarui."
-  send_discord(msg)
-  print("Proses otomatisasi selesai dan laporan terkirim ke Discord.")
+
+  send_dispatch_msg = send_discord(msg)
+  print("Proses otomatisasi selesai dan laporan P/L terkirim ke Discord.")
 
 
 if __name__ == "__main__":
