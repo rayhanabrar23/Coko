@@ -140,12 +140,12 @@ def main():
     avg_pnl = round(sum(l.get("pnl_pct", 0) for l in closed) / len(closed), 2)
     total_closed = len(closed)
 
-    # Deteksi trade yang selesai hari ini
+    # Deteksi trade yang selesai hari ini (PERBAIKAN TYPO DI SINI)
     closed_today = [l for l in closed if l.get("exit_date") == today]
     today_pnl_str = ""
     if closed_today:
       today_items = [
-          f"• `{c['ticker']}`: **{c['pnl_pct']:+.2f}%** ({c['status'])"
+          f"• `{c['ticker']}`: **{c['pnl_pct']:+.2f}%** ({c['status']})"
           for c in closed_today
       ]
       today_pnl_str = (
@@ -189,7 +189,7 @@ def main():
 
   msg += f"🔄 Status {updated_count} trade aktif/pending telah diperbarui."
 
-  send_dispatch_msg = send_discord(msg)
+  send_discord(msg)
   print("Proses otomatisasi selesai dan laporan P/L terkirim ke Discord.")
 
 
