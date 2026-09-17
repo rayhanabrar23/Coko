@@ -2,15 +2,14 @@ name: IDX Daily Scan & Trade Update
 
 on:
   schedule:
-    # Berjalan otomatis Senin - Jumat pukul 09:30 UTC (= 16:30 WIB, setelah bursa tutup)
     - cron: '30 9 * * 1-5'
-  workflow_dispatch: # Memungkinkan eksekusi manual via web GitHub
+  workflow_dispatch:
 
 jobs:
   run-screener:
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Diperlukan agar GitHub bisa memperbarui file json secara otomatis
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -18,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.12'   # <-- Diubah dari 3.10 ke 3.12 agar kompatibel dengan pandas-ta
           cache: 'pip'
 
       - name: Install Dependencies
