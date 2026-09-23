@@ -113,8 +113,8 @@
     "tp": 1601.0,
     "status": "OPEN",
     "note": "Breakeven: belum | SL dinamis: 1,393",
-    "current_or_exit_price": 1450.0,
-    "pnl_pct": -0.55,
+    "current_or_exit_price": 1460.0,
+    "pnl_pct": 0.14,
     "fill_date": "2026-09-18",
     "exit_date": null
   },
@@ -198,8 +198,8 @@
     "tp": 2541.0,
     "status": "OPEN",
     "note": "Breakeven: belum | SL dinamis: 2,154",
-    "current_or_exit_price": 2230.0,
-    "pnl_pct": -1.98,
+    "current_or_exit_price": 2260.0,
+    "pnl_pct": -0.66,
     "fill_date": "2026-09-21",
     "exit_date": null
   },
@@ -232,8 +232,8 @@
     "tp": 3367.0,
     "status": "OPEN",
     "note": "Breakeven: belum | SL dinamis: 2,897",
-    "current_or_exit_price": 3010.0,
-    "pnl_pct": -1.12,
+    "current_or_exit_price": 3050.0,
+    "pnl_pct": 0.2,
     "fill_date": "2026-09-21",
     "exit_date": null
   },
@@ -282,9 +282,9 @@
     "sl": 830.0,
     "tp": 1089.0,
     "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 830",
-    "current_or_exit_price": 950.0,
-    "pnl_pct": 4.28,
+    "note": "Breakeven: ya | SL dinamis: 911",
+    "current_or_exit_price": 960.0,
+    "pnl_pct": 5.38,
     "fill_date": "2026-09-22",
     "exit_date": null
   },
@@ -317,7 +317,7 @@
     "tp": 12772.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 11150.0,
+    "current_or_exit_price": 11275.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -334,7 +334,7 @@
     "tp": 3440.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3180.0,
+    "current_or_exit_price": 3190.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -368,7 +368,7 @@
     "tp": 3351.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3010.0,
+    "current_or_exit_price": 3050.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -385,7 +385,7 @@
     "tp": 1601.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 1450.0,
+    "current_or_exit_price": 1460.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -401,9 +401,9 @@
     "sl": 837.0,
     "tp": 1090.0,
     "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 837",
-    "current_or_exit_price": 950.0,
-    "pnl_pct": 3.71,
+    "note": "Breakeven: ya | SL dinamis: 916",
+    "current_or_exit_price": 960.0,
+    "pnl_pct": 4.8,
     "fill_date": "2026-09-22",
     "exit_date": null
   },
@@ -419,7 +419,7 @@
     "tp": 26950.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 25300.0,
+    "current_or_exit_price": 25200.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -434,7 +434,12 @@
     "entry": 1481.0,
     "sl": 1377.0,
     "tp": 1645.0,
-    "status": "PENDING"
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 1,377",
+    "current_or_exit_price": 1465.0,
+    "pnl_pct": -0.34,
+    "fill_date": "2026-09-23",
+    "exit_date": null
   },
   {
     "id": "2026-09-22_PTBA",
@@ -446,7 +451,12 @@
     "entry": 2965.0,
     "sl": 2822.0,
     "tp": 3200.0,
-    "status": "PENDING"
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 2,822",
+    "current_or_exit_price": 3050.0,
+    "pnl_pct": 2.87,
+    "fill_date": "2026-09-23",
+    "exit_date": null
   },
   {
     "id": "2026-09-22_AKRA",
@@ -458,7 +468,12 @@
     "entry": 1458.0,
     "sl": 1393.0,
     "tp": 1560.0,
-    "status": "PENDING"
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 1,393",
+    "current_or_exit_price": 1460.0,
+    "pnl_pct": 0.69,
+    "fill_date": "2026-09-23",
+    "exit_date": null
   },
   {
     "id": "2026-09-22_AMMN",
@@ -470,7 +485,12 @@
     "entry": 4675.0,
     "sl": 4364.0,
     "tp": 5275.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 4870.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-09-22_CUAN",
@@ -482,6 +502,71 @@
     "entry": 936.0,
     "sl": 857.0,
     "tp": 1040.0,
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 857",
+    "current_or_exit_price": 960.0,
+    "pnl_pct": 2.56,
+    "fill_date": "2026-09-23",
+    "exit_date": null
+  },
+  {
+    "id": "2026-09-23_PGEO",
+    "ticker": "PGEO",
+    "signal_date": "2026-09-23",
+    "signal": "\u2705 BUY",
+    "score": 66,
+    "regime": "Transition",
+    "entry": 1074.0,
+    "sl": 1035.0,
+    "tp": 1160.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-23_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-09-23",
+    "signal": "\u2705 BUY",
+    "score": 63,
+    "regime": "Trending",
+    "entry": 3004.0,
+    "sl": 2859.0,
+    "tp": 3200.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-23_AKRA",
+    "ticker": "AKRA",
+    "signal_date": "2026-09-23",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 1458.0,
+    "sl": 1395.0,
+    "tp": 1560.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-23_AMMN",
+    "ticker": "AMMN",
+    "signal_date": "2026-09-23",
+    "signal": "\u2705 BUY",
+    "score": 61,
+    "regime": "Trending",
+    "entry": 4797.0,
+    "sl": 4491.0,
+    "tp": 5275.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-23_CUAN",
+    "ticker": "CUAN",
+    "signal_date": "2026-09-23",
+    "signal": "\u2705 BUY",
+    "score": 61,
+    "regime": "Trending",
+    "entry": 946.0,
+    "sl": 865.0,
+    "tp": 1124.0,
     "status": "PENDING"
   }
 ]
