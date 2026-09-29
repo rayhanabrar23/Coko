@@ -763,5 +763,17 @@
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
+  },
+  {
+    "id": "2026-09-29_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-09-29",
+    "signal": "\u2705 BUY",
+    "score": 67,
+    "regime": "Trending",
+    "entry": 3063.0,
+    "sl": 2909.0,
+    "tp": 3402.0,
+    "status": "PENDING"
   }
 ]
