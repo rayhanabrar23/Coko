@@ -774,6 +774,47 @@
     "entry": 3063.0,
     "sl": 2909.0,
     "tp": 3402.0,
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 3120.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-09-30_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-09-30",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 3073.0,
+    "sl": 2922.0,
+    "tp": 3405.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-30_UNTR",
+    "ticker": "UNTR",
+    "signal_date": "2026-09-30",
+    "signal": "\u2705 BUY",
+    "score": 63,
+    "regime": "Transition",
+    "entry": 26669.0,
+    "sl": 25783.0,
+    "tp": 28618.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-09-30_MAPI",
+    "ticker": "MAPI",
+    "signal_date": "2026-09-30",
+    "signal": "\u2705 BUY",
+    "score": 60,
+    "regime": "Ranging",
+    "entry": 1527.0,
+    "sl": 1469.0,
+    "tp": 1655.0,
     "status": "PENDING"
   }
 ]
