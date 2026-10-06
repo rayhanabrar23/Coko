@@ -844,8 +844,8 @@
     "tp": 12925.0,
     "status": "OPEN",
     "note": "Breakeven: ya | SL dinamis: 11,300",
-    "current_or_exit_price": 11950.0,
-    "pnl_pct": 5.75,
+    "current_or_exit_price": 12125.0,
+    "pnl_pct": 7.3,
     "fill_date": "2026-10-02",
     "exit_date": null
   },
@@ -876,9 +876,9 @@
     "entry": 11377.0,
     "sl": 10721.0,
     "tp": 12925.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 11950.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 12125.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -894,9 +894,9 @@
     "sl": 2972.0,
     "tp": 3484.0,
     "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 2,972",
-    "current_or_exit_price": 3270.0,
-    "pnl_pct": 4.41,
+    "note": "Breakeven: ya | SL dinamis: 3,174",
+    "current_or_exit_price": 3400.0,
+    "pnl_pct": 8.56,
     "fill_date": "2026-10-05",
     "exit_date": null
   },
@@ -910,9 +910,9 @@
     "entry": 1457.0,
     "sl": 1391.0,
     "tp": 1560.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 1500.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 1520.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -927,7 +927,12 @@
     "entry": 11771.0,
     "sl": 11103.0,
     "tp": 12925.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 11771.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-10-06_PTBA",
@@ -939,7 +944,12 @@
     "entry": 3221.0,
     "sl": 3055.0,
     "tp": 3586.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 3221.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-10-06_AKRA",
@@ -951,6 +961,23 @@
     "entry": 1478.0,
     "sl": 1412.0,
     "tp": 1560.0,
+    "status": "PENDING",
+    "note": "Menunggu data hari berikutnya",
+    "current_or_exit_price": 1478.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-06_UNTR",
+    "ticker": "UNTR",
+    "signal_date": "2026-10-06",
+    "signal": "\u2705 BUY",
+    "score": 67,
+    "regime": "Trending",
+    "entry": 25610.0,
+    "sl": 24425.0,
+    "tp": 27075.0,
     "status": "PENDING"
   }
 ]
