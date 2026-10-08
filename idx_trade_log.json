@@ -844,8 +844,8 @@
     "tp": 12925.0,
     "status": "OPEN",
     "note": "Breakeven: ya | SL dinamis: 11,300",
-    "current_or_exit_price": 12100.0,
-    "pnl_pct": 7.08,
+    "current_or_exit_price": 11725.0,
+    "pnl_pct": 3.76,
     "fill_date": "2026-10-02",
     "exit_date": null
   },
@@ -929,7 +929,7 @@
     "tp": 12925.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 12100.0,
+    "current_or_exit_price": 11725.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -946,7 +946,7 @@
     "tp": 3586.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3380.0,
+    "current_or_exit_price": 3320.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -963,7 +963,7 @@
     "tp": 1560.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 1500.0,
+    "current_or_exit_price": 1450.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -980,7 +980,7 @@
     "tp": 27075.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 25350.0,
+    "current_or_exit_price": 24350.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -995,7 +995,12 @@
     "entry": 3329.0,
     "sl": 3156.0,
     "tp": 3710.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 3320.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-10-07_AKRA",
@@ -1007,6 +1012,35 @@
     "entry": 1478.0,
     "sl": 1413.0,
     "tp": 1560.0,
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 1450.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-08_AADI",
+    "ticker": "AADI",
+    "signal_date": "2026-10-08",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 11549.0,
+    "sl": 10887.0,
+    "tp": 12475.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-10-08_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-08",
+    "signal": "\u2705 BUY",
+    "score": 69,
+    "regime": "Trending",
+    "entry": 3270.0,
+    "sl": 3098.0,
+    "tp": 3490.0,
     "status": "PENDING"
   }
 ]
