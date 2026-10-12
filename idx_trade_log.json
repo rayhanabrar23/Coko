@@ -842,12 +842,12 @@
     "entry": 11305.0,
     "sl": 10648.0,
     "tp": 12925.0,
-    "status": "OPEN",
-    "note": "Breakeven: ya | SL dinamis: 11,300",
-    "current_or_exit_price": 11800.0,
-    "pnl_pct": 4.42,
+    "status": "LOSS",
+    "note": "Closed LOSS",
+    "current_or_exit_price": 0.0,
+    "pnl_pct": -100.38,
     "fill_date": "2026-10-02",
-    "exit_date": null
+    "exit_date": "2026-10-12"
   },
   {
     "id": "2026-10-01_PTBA",
@@ -995,9 +995,9 @@
     "entry": 3329.0,
     "sl": 3156.0,
     "tp": 3710.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3300.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 0.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1012,9 +1012,9 @@
     "entry": 1478.0,
     "sl": 1413.0,
     "tp": 1560.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 1485.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 0.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1029,9 +1029,9 @@
     "entry": 11549.0,
     "sl": 10887.0,
     "tp": 12475.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 11800.0,
+    "status": "CANCELLED",
+    "note": "Gap-down tembus SL sebelum sempat fill",
+    "current_or_exit_price": 0.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1046,12 +1046,12 @@
     "entry": 3270.0,
     "sl": 3098.0,
     "tp": 3490.0,
-    "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 3,098",
-    "current_or_exit_price": 3300.0,
-    "pnl_pct": 0.92,
+    "status": "LOSS",
+    "note": "Closed LOSS",
+    "current_or_exit_price": 0.0,
+    "pnl_pct": -100.38,
     "fill_date": "2026-10-09",
-    "exit_date": null
+    "exit_date": "2026-10-12"
   },
   {
     "id": "2026-10-09_AADI",
@@ -1063,7 +1063,12 @@
     "entry": 11623.0,
     "sl": 10965.0,
     "tp": 12475.0,
-    "status": "PENDING"
+    "status": "CANCELLED",
+    "note": "Gap-down tembus SL sebelum sempat fill",
+    "current_or_exit_price": 0.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-10-09_PTBA",
@@ -1075,6 +1080,11 @@
     "entry": 3250.0,
     "sl": 3076.0,
     "tp": 3490.0,
-    "status": "PENDING"
+    "status": "CANCELLED",
+    "note": "Gap-down tembus SL sebelum sempat fill",
+    "current_or_exit_price": 0.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   }
 ]
