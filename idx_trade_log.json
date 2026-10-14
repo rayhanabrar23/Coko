@@ -1086,5 +1086,41 @@
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
+  },
+  {
+    "id": "2026-10-14_MEDC",
+    "ticker": "MEDC",
+    "signal_date": "2026-10-14",
+    "signal": "\u2705 BUY",
+    "score": 63,
+    "regime": "Transition",
+    "entry": 1522.0,
+    "sl": 1452.0,
+    "tp": 1676.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-10-14_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-14",
+    "signal": "\u2705 BUY",
+    "score": 69,
+    "regime": "Trending",
+    "entry": 3221.0,
+    "sl": 3042.0,
+    "tp": 3490.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-10-14_TOWR",
+    "ticker": "TOWR",
+    "signal_date": "2026-10-14",
+    "signal": "\u2705 BUY",
+    "score": 69,
+    "regime": "Trending",
+    "entry": 447.0,
+    "sl": 418.0,
+    "tp": 511.0,
+    "status": "PENDING"
   }
 ]
