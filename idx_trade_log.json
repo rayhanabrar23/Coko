@@ -1097,7 +1097,12 @@
     "entry": 1522.0,
     "sl": 1452.0,
     "tp": 1676.0,
-    "status": "PENDING"
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 1,452",
+    "current_or_exit_price": 1515.0,
+    "pnl_pct": -0.46,
+    "fill_date": "2026-10-15",
+    "exit_date": null
   },
   {
     "id": "2026-10-14_PTBA",
@@ -1109,7 +1114,12 @@
     "entry": 3221.0,
     "sl": 3042.0,
     "tp": 3490.0,
-    "status": "PENDING"
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 3,042",
+    "current_or_exit_price": 3210.0,
+    "pnl_pct": -0.34,
+    "fill_date": "2026-10-15",
+    "exit_date": null
   },
   {
     "id": "2026-10-14_TOWR",
@@ -1121,6 +1131,35 @@
     "entry": 447.0,
     "sl": 418.0,
     "tp": 511.0,
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 448.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-15_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-15",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 3175.0,
+    "sl": 2993.0,
+    "tp": 3490.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-10-15_TOWR",
+    "ticker": "TOWR",
+    "signal_date": "2026-10-15",
+    "signal": "\u26a1 STRONG BUY",
+    "score": 71,
+    "regime": "Trending",
+    "entry": 441.0,
+    "sl": 411.0,
+    "tp": 507.0,
     "status": "PENDING"
   }
 ]
