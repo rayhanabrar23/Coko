@@ -1097,12 +1097,12 @@
     "entry": 1522.0,
     "sl": 1452.0,
     "tp": 1676.0,
-    "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 1,452",
-    "current_or_exit_price": 1515.0,
-    "pnl_pct": -0.46,
+    "status": "LOSS",
+    "note": "Closed LOSS",
+    "current_or_exit_price": 1290.0,
+    "pnl_pct": -15.62,
     "fill_date": "2026-10-15",
-    "exit_date": null
+    "exit_date": "2026-10-16"
   },
   {
     "id": "2026-10-14_PTBA",
@@ -1114,12 +1114,12 @@
     "entry": 3221.0,
     "sl": 3042.0,
     "tp": 3490.0,
-    "status": "OPEN",
-    "note": "Breakeven: belum | SL dinamis: 3,042",
-    "current_or_exit_price": 3210.0,
-    "pnl_pct": -0.34,
+    "status": "LOSS",
+    "note": "Closed LOSS",
+    "current_or_exit_price": 2730.0,
+    "pnl_pct": -15.62,
     "fill_date": "2026-10-15",
-    "exit_date": null
+    "exit_date": "2026-10-16"
   },
   {
     "id": "2026-10-14_TOWR",
@@ -1133,7 +1133,7 @@
     "tp": 511.0,
     "status": "PENDING",
     "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 448.0,
+    "current_or_exit_price": 388.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1148,7 +1148,12 @@
     "entry": 3175.0,
     "sl": 2993.0,
     "tp": 3490.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 2800.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   },
   {
     "id": "2026-10-15_TOWR",
@@ -1160,6 +1165,23 @@
     "entry": 441.0,
     "sl": 411.0,
     "tp": 507.0,
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 388.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-16_MEDC",
+    "ticker": "MEDC",
+    "signal_date": "2026-10-16",
+    "signal": "\u2705 BUY",
+    "score": 63,
+    "regime": "Transition",
+    "entry": 1446.0,
+    "sl": 1361.0,
+    "tp": 1580.0,
     "status": "PENDING"
   }
 ]
