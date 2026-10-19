@@ -1131,9 +1131,9 @@
     "entry": 447.0,
     "sl": 418.0,
     "tp": 511.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 388.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 374.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1148,9 +1148,9 @@
     "entry": 3175.0,
     "sl": 2993.0,
     "tp": 3490.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 2800.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 2870.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1165,9 +1165,9 @@
     "entry": 441.0,
     "sl": 411.0,
     "tp": 507.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 388.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 374.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1182,6 +1182,11 @@
     "entry": 1446.0,
     "sl": 1361.0,
     "tp": 1580.0,
-    "status": "PENDING"
+    "status": "CANCELLED",
+    "note": "Gap-down tembus SL sebelum sempat fill",
+    "current_or_exit_price": 1200.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   }
 ]
