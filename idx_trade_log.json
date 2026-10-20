@@ -1188,5 +1188,17 @@
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
+  },
+  {
+    "id": "2026-10-20_AADI",
+    "ticker": "AADI",
+    "signal_date": "2026-10-20",
+    "signal": "\u2705 BUY",
+    "score": 64,
+    "regime": "Trending",
+    "entry": 11245.0,
+    "sl": 10392.0,
+    "tp": 12375.0,
+    "status": "PENDING"
   }
 ]
