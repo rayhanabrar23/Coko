@@ -1199,6 +1199,23 @@
     "entry": 11245.0,
     "sl": 10392.0,
     "tp": 12375.0,
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 10,392",
+    "current_or_exit_price": 11100.0,
+    "pnl_pct": 0.91,
+    "fill_date": "2026-10-21",
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-21_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-21",
+    "signal": "\u2705 BUY",
+    "score": 69,
+    "regime": "Trending",
+    "entry": 3108.0,
+    "sl": 2855.0,
+    "tp": 3490.0,
     "status": "PENDING"
   }
 ]
