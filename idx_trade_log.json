@@ -1201,8 +1201,8 @@
     "tp": 12375.0,
     "status": "OPEN",
     "note": "Breakeven: belum | SL dinamis: 10,392",
-    "current_or_exit_price": 11100.0,
-    "pnl_pct": 0.91,
+    "current_or_exit_price": 11300.0,
+    "pnl_pct": 2.73,
     "fill_date": "2026-10-21",
     "exit_date": null
   },
@@ -1215,6 +1215,35 @@
     "regime": "Trending",
     "entry": 3108.0,
     "sl": 2855.0,
+    "tp": 3490.0,
+    "status": "OPEN",
+    "note": "Breakeven: belum | SL dinamis: 2,855",
+    "current_or_exit_price": 3180.0,
+    "pnl_pct": 2.91,
+    "fill_date": "2026-10-22",
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-22_AADI",
+    "ticker": "AADI",
+    "signal_date": "2026-10-22",
+    "signal": "\u2705 BUY",
+    "score": 64,
+    "regime": "Transition",
+    "entry": 11238.0,
+    "sl": 10543.0,
+    "tp": 12375.0,
+    "status": "PENDING"
+  },
+  {
+    "id": "2026-10-22_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-22",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 3132.0,
+    "sl": 2878.0,
     "tp": 3490.0,
     "status": "PENDING"
   }
