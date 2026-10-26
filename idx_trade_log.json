@@ -1201,8 +1201,8 @@
     "tp": 12375.0,
     "status": "OPEN",
     "note": "Breakeven: ya | SL dinamis: 11,000",
-    "current_or_exit_price": 11375.0,
-    "pnl_pct": 3.41,
+    "current_or_exit_price": 11525.0,
+    "pnl_pct": 4.77,
     "fill_date": "2026-10-21",
     "exit_date": null
   },
@@ -1218,8 +1218,8 @@
     "tp": 3490.0,
     "status": "OPEN",
     "note": "Breakeven: ya | SL dinamis: 3,090",
-    "current_or_exit_price": 3280.0,
-    "pnl_pct": 6.15,
+    "current_or_exit_price": 3220.0,
+    "pnl_pct": 4.21,
     "fill_date": "2026-10-22",
     "exit_date": null
   },
@@ -1233,9 +1233,9 @@
     "entry": 11238.0,
     "sl": 10543.0,
     "tp": 12375.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 11375.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 11525.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1250,9 +1250,9 @@
     "entry": 3132.0,
     "sl": 2878.0,
     "tp": 3490.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3280.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 3220.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1267,6 +1267,23 @@
     "entry": 3231.0,
     "sl": 2972.0,
     "tp": 3801.0,
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 3220.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
+  },
+  {
+    "id": "2026-10-26_PTBA",
+    "ticker": "PTBA",
+    "signal_date": "2026-10-26",
+    "signal": "\u2705 BUY",
+    "score": 68,
+    "regime": "Trending",
+    "entry": 3172.0,
+    "sl": 2920.0,
+    "tp": 3490.0,
     "status": "PENDING"
   }
 ]
