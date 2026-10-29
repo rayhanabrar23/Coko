@@ -1201,8 +1201,8 @@
     "tp": 12375.0,
     "status": "OPEN",
     "note": "Breakeven: ya | SL dinamis: 11,000",
-    "current_or_exit_price": 11650.0,
-    "pnl_pct": 5.91,
+    "current_or_exit_price": 11125.0,
+    "pnl_pct": 1.14,
     "fill_date": "2026-10-21",
     "exit_date": null
   },
@@ -1284,9 +1284,9 @@
     "entry": 3172.0,
     "sl": 2920.0,
     "tp": 3490.0,
-    "status": "PENDING",
-    "note": "Menunggu harga pullback ke level entry",
-    "current_or_exit_price": 3250.0,
+    "status": "CANCELLED",
+    "note": "Tidak pernah pullback ke level entry",
+    "current_or_exit_price": 3060.0,
     "pnl_pct": 0,
     "fill_date": null,
     "exit_date": null
@@ -1303,8 +1303,8 @@
     "tp": 3490.0,
     "status": "OPEN",
     "note": "Breakeven: belum | SL dinamis: 2,887",
-    "current_or_exit_price": 3250.0,
-    "pnl_pct": 3.44,
+    "current_or_exit_price": 3060.0,
+    "pnl_pct": -2.61,
     "fill_date": "2026-10-28",
     "exit_date": null
   },
@@ -1318,6 +1318,11 @@
     "entry": 3201.0,
     "sl": 2945.0,
     "tp": 3764.0,
-    "status": "PENDING"
+    "status": "PENDING",
+    "note": "Menunggu harga pullback ke level entry",
+    "current_or_exit_price": 3060.0,
+    "pnl_pct": 0,
+    "fill_date": null,
+    "exit_date": null
   }
 ]
